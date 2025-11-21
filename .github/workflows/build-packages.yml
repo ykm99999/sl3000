@@ -53,14 +53,10 @@ jobs:
 CONFIG_TARGET_mediatek=y
 CONFIG_TARGET_mediatek_filogic=y
 CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000=y
-CONFIG_TARGET_ARCH_PACKAGES="${{ github.event.inputs.target_arch }}"
+CONFIG_TARGET_ARCH_PACKAGES=${{ github.event.inputs.target_arch }}
 CONFIG_TARGET_ROOTFS_PARTSIZE=512
-
-# 工具链配置
 CONFIG_TOOLCHAIN=y
 CONFIG_TOOLCHAIN_LIBC_USE_MUSL=y
-
-# 基础系统（最小集）
 CONFIG_BUSYBOX_CUSTOM=y
 CONFIG_PACKAGE_base-files=y
 CONFIG_PACKAGE_busybox=y
@@ -69,16 +65,12 @@ CONFIG_PACKAGE_libgcc=y
 CONFIG_PACKAGE_libpthread=y
 CONFIG_PACKAGE_librt=y
 CONFIG_PACKAGE_libstdcpp=y
-
-# Docker 必需内核模块
 CONFIG_PACKAGE_kmod-veth=y
 CONFIG_PACKAGE_kmod-br-netfilter=y
 CONFIG_PACKAGE_kmod-nf-conntrack=y
 CONFIG_PACKAGE_kmod-nf-conntrack-netlink=y
 CONFIG_PACKAGE_kmod-nf-nat=y
 CONFIG_PACKAGE_kmod-ipt-core=y
-
-# 基础库
 CONFIG_PACKAGE_libopenssl=y
 CONFIG_PACKAGE_libcurl=y
 CONFIG_PACKAGE_zlib=y
@@ -89,14 +81,10 @@ CONFIG_PACKAGE_libselinux=y
 CONFIG_PACKAGE_libseccomp=y
 CONFIG_PACKAGE_libdevmapper=y
 CONFIG_PACKAGE_libnetwork=y
-
-# 网络工具
 CONFIG_PACKAGE_curl=y
 CONFIG_PACKAGE_wget=y
 CONFIG_PACKAGE_iptables=y
 CONFIG_PACKAGE_iptables-mod-extra=y
-
-# 禁用固件生成
 CONFIG_TARGET_ROOTFS_SQUASHFS=n
 CONFIG_TARGET_IMAGES=n
 CONFIG_IB=n
@@ -112,7 +100,6 @@ EOF
           make patch pkgconf python3 python3-pip \
           rsync subversion unzip wget zlib1g-dev
         
-        # 设置交换文件
         sudo fallocate -l 4G /swapfile
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
@@ -142,7 +129,6 @@ EOF
         cd openwrt
         echo "=== 配置 feeds ==="
         
-        # 确保 Passwall2 feeds
         if ! grep -q "passwall2" feeds.conf.default; then
           echo "src-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git;main" >> feeds.conf.default
         fi
@@ -183,17 +169,12 @@ EOF
         cd openwrt
         echo "=== 编译 Docker 系列包 ==="
         
-        # Docker 核心包
         make package/feeds/packages/docker/compile -j2 V=0
         make package/feeds/packages/dockerd/compile -j2 V=0
         make package/feeds/packages/docker-compose/compile -j2 V=0
-        
-        # Docker 管理界面
         make package/feeds/packages/luci-app-dockerman/compile -j2 V=0
         make package/feeds/packages/luci-lib-docker/compile -j2 V=0
         make package/feeds/packages/luci-i18n-dockerman-zh-cn/compile -j2 V=0
-        
-        # Docker 依赖
         make package/feeds/packages/containerd/compile -j2 V=0
         make package/feeds/packages/runc/compile -j2 V=0
         make package/feeds/packages/tini/compile -j2 V=0
@@ -207,18 +188,13 @@ EOF
         cd openwrt
         echo "=== 编译 Passwall2 系列包 ==="
         
-        # Passwall2 主程序
         make package/feeds/passwall2/luci-app-passwall2/compile -j2 V=0
         make package/feeds/passwall2/luci-i18n-passwall2-zh-cn/compile -j2 V=0
-        
-        # Passwall2 依赖的核心包
         make package/feeds/packages/v2ray-core/compile -j2 V=0
         make package/feeds/packages/xray-core/compile -j2 V=0
         make package/feeds/packages/shadowsocks-rust/compile -j2 V=0
         make package/feeds/packages/trojan/compile -j2 V=0
         make package/feeds/packages/simple-obfs/compile -j2 V=0
-        
-        # 网络工具
         make package/feeds/packages/curl/compile -j2 V=0
         make package/feeds/packages/wget/compile -j2 V=0
         make package/feeds/packages/iptables/compile -j2 V=0
@@ -233,15 +209,12 @@ EOF
         echo "=== 收集 IPK 包 ==="
         
         mkdir -p ../ipk-packages
-        
-        # 收集所有包
         find bin -name "*.ipk" | while read file; do
           echo "📦 $(basename "$file")"
           cp "$file" ../ipk-packages/
         done
         
         echo "IPK_PACKAGES_DIR=$(pwd)/../ipk-packages" >> $GITHUB_ENV
-        
         echo "最终磁盘使用:"
         df -h
 
@@ -264,7 +237,6 @@ EOF
         echo "" >> README.md
         echo "### 1. 上传包到路由器" >> README.md
         echo '```bash' >> README.md
-        echo "# 上传所有包" >> README.md
         echo "scp *.ipk root@192.168.1.1:/tmp/" >> README.md
         echo '```' >> README.md
         echo "" >> README.md
@@ -296,9 +268,8 @@ EOF
       run: |
         echo "=== 编译统计 ==="
         ccache -s
-        echo "生成的 IPK 包:"
-        find ipk-packages -name "*.ipk" | wc -l | xargs echo "数量:"
-        find ipk-packages -name "*.ipk" -exec du -ch {} + | grep total | cut -f1 | xargs echo "总大小:"
+        echo "生成的 IPK 包: $(find ipk-packages -name "*.ipk" | wc -l)"
+        echo "总大小: $(find ipk-packages -name "*.ipk" -exec du -ch {} + | grep total | cut -f1)"
         echo "磁盘使用:"
         df -h
 
