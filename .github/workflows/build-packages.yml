@@ -1,0 +1,153 @@
+name: 编译 Docker 和 Passwall2 软件包
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_arch:
+        description: '目标架构'
+        required: true
+        default: 'aarch64_cortex-a53'
+        type: string
+
+env:
+  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-24.10
+  REPO_BRANCH: 2410
+  CCACHE_DIR: /tmp/ccache
+
+jobs:
+  build-packages:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+    - name: 检查代码
+      uses: actions/checkout@v4
+
+    - name: 初始化环境
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential ccache cmake curl \
+          flex gawk gettext git libncurses5-dev libssl-dev \
+          make patch pkgconf python3 python3-pip \
+          rsync subversion unzip wget zlib1g-dev
+
+    - name: 配置缓存
+      run: |
+        sudo mkdir -p $CCACHE_DIR
+        sudo chown -R $USER:$GROUPS $CCACHE_DIR
+        ccache -o compression=true
+        ccache -o max_size=2G
+        ccache -s
+
+    - name: 克隆源码
+      run: |
+        git clone --depth=1 $REPO_URL -b $REPO_BRANCH openwrt
+        cd openwrt
+
+    - name: 配置 feeds
+      run: |
+        cd openwrt
+        # 添加 Passwall2 源
+        cat >> feeds.conf.default << 'EOF'
+src-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git;main
+EOF
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: 配置编译环境
+      run: |
+        cd openwrt
+        # 创建最小化配置
+        cat > .config << 'EOF'
+CONFIG_TARGET_mediatek=y
+CONFIG_TARGET_mediatek_filogic=y
+CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000=y
+CONFIG_TARGET_ARCH_PACKAGES="${{ github.event.inputs.target_arch }}"
+EOF
+        make defconfig
+
+    - name: 下载依赖
+      run: |
+        cd openwrt
+        make download -j$(nproc)
+
+    - name: 编译 Docker 相关包
+      run: |
+        cd openwrt
+        echo "开始编译 Docker 系列包..."
+        # 编译 Docker 核心包
+        make package/feeds/packages/docker/compile -j$(nproc) V=s
+        make package/feeds/packages/dockerd/compile -j$(nproc) V=s
+        make package/feeds/packages/docker-compose/compile -j$(nproc) V=s
+        
+        # 编译 Docker 管理界面
+        make package/feeds/packages/luci-app-dockerman/compile -j$(nproc) V=s
+        make package/feeds/packages/luci-lib-docker/compile -j$(nproc) V=s
+        make package/feeds/packages/luci-i18n-dockerman-zh-cn/compile -j$(nproc) V=s
+        
+        # 编译 Docker 依赖内核模块
+        make package/kernel/kmod-veth/compile -j$(nproc) V=s
+        make package/kernel/kmod-br-netfilter/compile -j$(nproc) V=s
+
+    - name: 编译 Passwall2 相关包
+      run: |
+        cd openwrt
+        echo "开始编译 Passwall2 系列包..."
+        # 编译 Passwall2 主程序
+        make package/feeds/passwall2/luci-app-passwall2/compile -j$(nproc) V=s
+        make package/feeds/passwall2/luci-i18n-passwall2-zh-cn/compile -j$(nproc) V=s
+        
+        # 编译可能依赖的基础包
+        make package/feeds/packages/curl/compile -j$(nproc) V=s
+        make package/feeds/packages/wget/compile -j$(nproc) V=s
+
+    - name: 收集生成的 IPK 包
+      run: |
+        cd openwrt
+        echo "=== 生成的软件包列表 ==="
+        find bin -name "*.ipk" | grep -E "(docker|passwall)" | while read file; do
+          echo "📦 $file ($(du -h "$file" | cut -f1))"
+        done
+        
+        # 创建软件包目录
+        mkdir -p ../ipk-packages
+        find bin -name "*.ipk" -exec cp {} ../ipk-packages/ \;
+        
+        echo "IPK_PACKAGES_DIR=$(pwd)/../ipk-packages" >> $GITHUB_ENV
+
+    - name: 上传 IPK 软件包
+      uses: actions/upload-artifact@v4
+      with:
+        name: ipk-packages-${{ github.event.inputs.target_arch }}-$(date +%Y%m%d)
+        path: ipk-packages/*.ipk
+        retention-days: 30
+        compression-level: 0
+
+    - name: 生成包列表
+      run: |
+        cd ipk-packages
+        ls -la *.ipk > package-list.txt
+        echo "📋 生成的软件包列表:" > summary.md
+        echo "```" >> summary.md
+        ls -la *.ipk >> summary.md
+        echo "```" >> summary.md
+        echo "总共: $(ls -1 *.ipk | wc -l) 个包" >> summary.md
+
+    - name: 上传包列表
+      uses: actions/upload-artifact@v4
+      with:
+        name: package-info-${{ github.event.inputs.target_arch }}
+        path: |
+          ipk-packages/package-list.txt
+          ipk-packages/summary.md
+        retention-days: 7
+
+    - name: 编译完成统计
+      if: always()
+      run: |
+        echo "=== 编译统计 ==="
+        ccache -s
+        echo "生成的 IPK 包:"
+        find ipk-packages -name "*.ipk" | wc -l | xargs echo "数量:"
+        find ipk-packages -name "*.ipk" -exec du -ch {} + | grep total | cut -f1 | xargs echo "总大小:"
