@@ -45,6 +45,13 @@ jobs:
         echo "CONFIG_PACKAGE_luci-app-passwall2=y" >> .config
         make defconfig
 
+    # 编译工具链和 host 工具，避免 libdeflate-gzip 缺失
+    - name: Build Toolchain
+      run: |
+        cd openwrt
+        make tools/install -j$(nproc) V=s
+        make toolchain/install -j$(nproc) V=s
+
     # 编译软件包
     - name: Build Packages
       run: |
