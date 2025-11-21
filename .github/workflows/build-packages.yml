@@ -1,10 +1,10 @@
-name: 编译 Docker 和 Passwall2 软件包
+name: Compile Docker and Passwall2 Packages
 
 on:
   workflow_dispatch:
     inputs:
       target_arch:
-        description: '目标架构'
+        description: 'Target Architecture'
         required: true
         default: 'aarch64_cortex-a53'
         type: string
@@ -20,12 +20,12 @@ jobs:
     timeout-minutes: 90
 
     steps:
-    - name: 检查代码
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: 深度磁盘清理
+    - name: Deep disk cleanup
       run: |
-        echo "=== 深度磁盘清理 ==="
+        echo "=== Deep disk cleanup ==="
         sudo sync
         echo 3 | sudo tee /proc/sys/vm/drop_caches
         
@@ -44,55 +44,54 @@ jobs:
         sudo journalctl --vacuum-time=1h
         sudo rm -rf /tmp/* /var/tmp/*
         
-        echo "清理后磁盘:"
+        echo "Disk after cleanup:"
         df -h
 
-    - name: 创建最小化配置
+    - name: Create minimal config
       run: |
-        cat > minimal.config << 'EOF'
-CONFIG_TARGET_mediatek=y
-CONFIG_TARGET_mediatek_filogic=y
-CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000=y
-CONFIG_TARGET_ARCH_PACKAGES=${{ github.event.inputs.target_arch }}
-CONFIG_TARGET_ROOTFS_PARTSIZE=512
-CONFIG_TOOLCHAIN=y
-CONFIG_TOOLCHAIN_LIBC_USE_MUSL=y
-CONFIG_BUSYBOX_CUSTOM=y
-CONFIG_PACKAGE_base-files=y
-CONFIG_PACKAGE_busybox=y
-CONFIG_PACKAGE_libc=y
-CONFIG_PACKAGE_libgcc=y
-CONFIG_PACKAGE_libpthread=y
-CONFIG_PACKAGE_librt=y
-CONFIG_PACKAGE_libstdcpp=y
-CONFIG_PACKAGE_kmod-veth=y
-CONFIG_PACKAGE_kmod-br-netfilter=y
-CONFIG_PACKAGE_kmod-nf-conntrack=y
-CONFIG_PACKAGE_kmod-nf-conntrack-netlink=y
-CONFIG_PACKAGE_kmod-nf-nat=y
-CONFIG_PACKAGE_kmod-ipt-core=y
-CONFIG_PACKAGE_libopenssl=y
-CONFIG_PACKAGE_libcurl=y
-CONFIG_PACKAGE_zlib=y
-CONFIG_PACKAGE_libatomic=y
-CONFIG_PACKAGE_libjson-c=y
-CONFIG_PACKAGE_libpcre=y
-CONFIG_PACKAGE_libselinux=y
-CONFIG_PACKAGE_libseccomp=y
-CONFIG_PACKAGE_libdevmapper=y
-CONFIG_PACKAGE_libnetwork=y
-CONFIG_PACKAGE_curl=y
-CONFIG_PACKAGE_wget=y
-CONFIG_PACKAGE_iptables=y
-CONFIG_PACKAGE_iptables-mod-extra=y
-CONFIG_TARGET_ROOTFS_SQUASHFS=n
-CONFIG_TARGET_IMAGES=n
-CONFIG_IB=n
-EOF
+        # Create minimal config file line by line to avoid YAML syntax issues
+        echo "CONFIG_TARGET_mediatek=y" > minimal.config
+        echo "CONFIG_TARGET_mediatek_filogic=y" >> minimal.config
+        echo "CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000=y" >> minimal.config
+        echo "CONFIG_TARGET_ARCH_PACKAGES=${{ github.event.inputs.target_arch }}" >> minimal.config
+        echo "CONFIG_TARGET_ROOTFS_PARTSIZE=512" >> minimal.config
+        echo "CONFIG_TOOLCHAIN=y" >> minimal.config
+        echo "CONFIG_TOOLCHAIN_LIBC_USE_MUSL=y" >> minimal.config
+        echo "CONFIG_BUSYBOX_CUSTOM=y" >> minimal.config
+        echo "CONFIG_PACKAGE_base-files=y" >> minimal.config
+        echo "CONFIG_PACKAGE_busybox=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libc=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libgcc=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libpthread=y" >> minimal.config
+        echo "CONFIG_PACKAGE_librt=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libstdcpp=y" >> minimal.config
+        echo "CONFIG_PACKAGE_kmod-veth=y" >> minimal.config
+        echo "CONFIG_PACKAGE_kmod-br-netfilter=y" >> minimal.config
+        echo "CONFIG_PACKAGE_kmod-nf-conntrack=y" >> minimal.config
+        echo "CONFIG_PACKAGE_kmod-nf-conntrack-netlink=y" >> minimal.config
+        echo "CONFIG_PACKAGE_kmod-nf-nat=y" >> minimal.config
+        echo "CONFIG_PACKAGE_kmod-ipt-core=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libopenssl=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libcurl=y" >> minimal.config
+        echo "CONFIG_PACKAGE_zlib=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libatomic=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libjson-c=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libpcre=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libselinux=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libseccomp=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libdevmapper=y" >> minimal.config
+        echo "CONFIG_PACKAGE_libnetwork=y" >> minimal.config
+        echo "CONFIG_PACKAGE_curl=y" >> minimal.config
+        echo "CONFIG_PACKAGE_wget=y" >> minimal.config
+        echo "CONFIG_PACKAGE_iptables=y" >> minimal.config
+        echo "CONFIG_PACKAGE_iptables-mod-extra=y" >> minimal.config
+        echo "CONFIG_TARGET_ROOTFS_SQUASHFS=n" >> minimal.config
+        echo "CONFIG_TARGET_IMAGES=n" >> minimal.config
+        echo "CONFIG_IB=n" >> minimal.config
 
-    - name: 初始化环境
+    - name: Initialize environment
       run: |
-        echo "=== 安装编译依赖 ==="
+        echo "=== Install build dependencies ==="
         sudo apt-get update
         sudo apt-get install -y \
           build-essential ccache curl \
@@ -105,10 +104,10 @@ EOF
         sudo mkswap /swapfile
         sudo swapon /swapfile
         
-        echo "内存信息:"
+        echo "Memory info:"
         free -h
 
-    - name: 配置编译缓存
+    - name: Configure build cache
       run: |
         sudo mkdir -p $CCACHE_DIR
         sudo chown -R $USER:$GROUPS $CCACHE_DIR
@@ -117,17 +116,17 @@ EOF
         ccache -o max_size=1G
         ccache -s
 
-    - name: 克隆源码
+    - name: Clone source code
       run: |
-        echo "=== 浅层克隆源码 ==="
+        echo "=== Clone source code ==="
         git clone --depth=1 --filter=blob:limit=1M $REPO_URL -b $REPO_BRANCH openwrt
-        echo "克隆后磁盘:"
+        echo "Disk after clone:"
         df -h
 
-    - name: 配置 feeds
+    - name: Configure feeds
       run: |
         cd openwrt
-        echo "=== 配置 feeds ==="
+        echo "=== Configure feeds ==="
         
         if ! grep -q "passwall2" feeds.conf.default; then
           echo "src-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git;main" >> feeds.conf.default
@@ -136,38 +135,38 @@ EOF
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: 应用最小化配置
+    - name: Apply minimal config
       run: |
         cd openwrt
-        echo "=== 应用最小化配置 ==="
+        echo "=== Apply minimal config ==="
         cp ../minimal.config .config
         make defconfig
         
-        echo "配置摘要:"
-        echo "目标架构: $(grep 'CONFIG_TARGET_ARCH_PACKAGES' .config)"
-        echo "启用的包数量: $(grep '^CONFIG_PACKAGE_' .config | wc -l)"
+        echo "Config summary:"
+        echo "Target arch: $(grep 'CONFIG_TARGET_ARCH_PACKAGES' .config)"
+        echo "Enabled packages: $(grep '^CONFIG_PACKAGE_' .config | wc -l)"
 
-    - name: 下载工具链依赖
+    - name: Download toolchain dependencies
       run: |
         cd openwrt
-        echo "=== 下载工具链 ==="
+        echo "=== Download toolchain ==="
         make toolchain/download -j2
         make target/linux/download -j2
-        echo "下载后磁盘:"
+        echo "Disk after downloads:"
         df -h
 
-    - name: 编译工具链
+    - name: Compile toolchain
       run: |
         cd openwrt
-        echo "=== 编译工具链 ==="
+        echo "=== Compile toolchain ==="
         make -j2 tools/compile toolchain/compile
-        echo "工具链编译后磁盘:"
+        echo "Disk after toolchain:"
         df -h
 
-    - name: 编译 Docker 完整包系列
+    - name: Compile Docker packages
       run: |
         cd openwrt
-        echo "=== 编译 Docker 系列包 ==="
+        echo "=== Compile Docker packages ==="
         
         make package/feeds/packages/docker/compile -j2 V=0
         make package/feeds/packages/dockerd/compile -j2 V=0
@@ -179,102 +178,13 @@ EOF
         make package/feeds/packages/runc/compile -j2 V=0
         make package/feeds/packages/tini/compile -j2 V=0
         
-        echo "Docker 编译完成"
+        echo "Docker compilation complete"
         sudo sync
         echo 3 | sudo tee /proc/sys/vm/drop_caches
 
-    - name: 编译 Passwall2 完整包系列
+    - name: Compile Passwall2 packages
       run: |
         cd openwrt
-        echo "=== 编译 Passwall2 系列包 ==="
+        echo "=== Compile Passwall2 packages ==="
         
-        make package/feeds/passwall2/luci-app-passwall2/compile -j2 V=0
-        make package/feeds/passwall2/luci-i18n-passwall2-zh-cn/compile -j2 V=0
-        make package/feeds/packages/v2ray-core/compile -j2 V=0
-        make package/feeds/packages/xray-core/compile -j2 V=0
-        make package/feeds/packages/shadowsocks-rust/compile -j2 V=0
-        make package/feeds/packages/trojan/compile -j2 V=0
-        make package/feeds/packages/simple-obfs/compile -j2 V=0
-        make package/feeds/packages/curl/compile -j2 V=0
-        make package/feeds/packages/wget/compile -j2 V=0
-        make package/feeds/packages/iptables/compile -j2 V=0
-        
-        echo "Passwall2 编译完成"
-        sudo sync
-        echo 3 | sudo tee /proc/sys/vm/drop_caches
-
-    - name: 收集生成的 IPK 包
-      run: |
-        cd openwrt
-        echo "=== 收集 IPK 包 ==="
-        
-        mkdir -p ../ipk-packages
-        find bin -name "*.ipk" | while read file; do
-          echo "📦 $(basename "$file")"
-          cp "$file" ../ipk-packages/
-        done
-        
-        echo "IPK_PACKAGES_DIR=$(pwd)/../ipk-packages" >> $GITHUB_ENV
-        echo "最终磁盘使用:"
-        df -h
-
-    - name: 生成包列表和安装说明
-      run: |
-        cd ipk-packages
-        echo "# Docker 和 Passwall2 软件包" > README.md
-        echo "" >> README.md
-        echo "## 生成的软件包列表" >> README.md
-        echo "" >> README.md
-        echo "| 包名 | 大小 |" >> README.md
-        echo "|------|------|" >> README.md
-        ls -1 *.ipk | while read pkg; do
-          size=$(du -h "$pkg" | cut -f1)
-          echo "| $pkg | $size |" >> README.md
-        done
-        
-        echo "" >> README.md
-        echo "## 安装说明" >> README.md
-        echo "" >> README.md
-        echo "### 1. 上传包到路由器" >> README.md
-        echo '```bash' >> README.md
-        echo "scp *.ipk root@192.168.1.1:/tmp/" >> README.md
-        echo '```' >> README.md
-        echo "" >> README.md
-        echo "### 2. 安装 Docker 系列" >> README.md
-        echo '```bash' >> README.md
-        echo "opkg install /tmp/docker*.ipk" >> README.md
-        echo "opkg install /tmp/luci-app-dockerman*.ipk" >> README.md
-        echo "opkg install /tmp/containerd*.ipk /tmp/runc*.ipk" >> README.md
-        echo '```' >> README.md
-        echo "" >> README.md
-        echo "### 3. 安装 Passwall2 系列" >> README.md
-        echo '```bash' >> README.md
-        echo "opkg install /tmp/luci-app-passwall2*.ipk" >> README.md
-        echo "opkg install /tmp/v2ray*.ipk /tmp/xray*.ipk /tmp/shadowsocks*.ipk" >> README.md
-        echo '```' >> README.md
-
-    - name: 上传 IPK 软件包
-      uses: actions/upload-artifact@v4
-      with:
-        name: ipk-packages-${{ github.event.inputs.target_arch }}-$(date +%Y%m%d)
-        path: |
-          ipk-packages/*.ipk
-          ipk-packages/README.md
-        retention-days: 30
-        compression-level: 0
-
-    - name: 编译统计
-      if: always()
-      run: |
-        echo "=== 编译统计 ==="
-        ccache -s
-        echo "生成的 IPK 包: $(find ipk-packages -name "*.ipk" | wc -l)"
-        echo "总大小: $(find ipk-packages -name "*.ipk" -exec du -ch {} + | grep total | cut -f1)"
-        echo "磁盘使用:"
-        df -h
-
-    - name: 清理交换文件
-      if: always()
-      run: |
-        sudo swapoff /swapfile 2>/dev/null || true
-        sudo rm -f /swapfile 2>/dev/null || true
+        make
