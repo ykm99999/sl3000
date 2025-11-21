@@ -2,9 +2,6 @@ name: Build SL-3000 Packages
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   build:
@@ -12,15 +9,12 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     # 磁盘清理，释放空间
     - name: Free Disk Space
       run: |
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost
         sudo docker rmi $(docker images -q) || true
         df -h
 
@@ -45,22 +39,22 @@ jobs:
       run: |
         cd openwrt
         make defconfig
-        # 清空默认配置，只选需要的包
+        # 清空已有配置，只选需要的包
         sed -i '/CONFIG_PACKAGE_/d' .config
         echo "CONFIG_PACKAGE_docker=y" >> .config
         echo "CONFIG_PACKAGE_luci-app-passwall2=y" >> .config
         make defconfig
 
-    # 编译
+    # 编译软件包
     - name: Build Packages
       run: |
         cd openwrt
         make package/docker/compile V=s -j$(nproc)
         make package/luci-app-passwall2/compile V=s -j$(nproc)
 
-    # 上传编译结果
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v3
+    # 上传编译结果 (ipk 包)
+    - name: Upload Packages
+      uses: actions/upload-artifact@v4
       with:
         name: sl3000-packages
         path: openwrt/bin/packages/
