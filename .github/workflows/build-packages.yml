@@ -1,190 +1,66 @@
-name: Compile Docker and Passwall2 Packages
+name: Build SL-3000 Packages
 
 on:
   workflow_dispatch:
-    inputs:
-      target_arch:
-        description: 'Target Architecture'
-        required: true
-        default: 'aarch64_cortex-a53'
-        type: string
-
-env:
-  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-24.10
-  REPO_BRANCH: 2410
-  CCACHE_DIR: /tmp/ccache
+  push:
+    branches:
+      - main
 
 jobs:
-  build-packages:
+  build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v3
 
-    - name: Deep disk cleanup
+    # 磁盘清理，释放空间
+    - name: Free Disk Space
       run: |
-        echo "=== Deep disk cleanup ==="
-        sudo sync
-        echo 3 | sudo tee /proc/sys/vm/drop_caches
-        
-        sudo rm -rf \
-          /usr/share/dotnet \
-          /usr/local/lib/android \
-          /opt/ghc \
-          /opt/hostedtoolcache/* \
-          /usr/local/lib/node_modules
-        
-        sudo docker system prune -af 2>/dev/null || true
-        sudo apt-get autoremove -y
-        sudo apt-get clean
-        sudo rm -rf /var/lib/apt/lists/*
-        
-        sudo journalctl --vacuum-time=1h
-        sudo rm -rf /tmp/* /var/tmp/*
-        
-        echo "Disk after cleanup:"
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /usr/local/share/boost
+        sudo docker rmi $(docker images -q) || true
         df -h
 
-    - name: Create minimal config
+    # 安装依赖
+    - name: Install Dependencies
       run: |
-        # Create minimal config file line by line to avoid YAML syntax issues
-        echo "CONFIG_TARGET_mediatek=y" > minimal.config
-        echo "CONFIG_TARGET_mediatek_filogic=y" >> minimal.config
-        echo "CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000=y" >> minimal.config
-        echo "CONFIG_TARGET_ARCH_PACKAGES=${{ github.event.inputs.target_arch }}" >> minimal.config
-        echo "CONFIG_TARGET_ROOTFS_PARTSIZE=512" >> minimal.config
-        echo "CONFIG_TOOLCHAIN=y" >> minimal.config
-        echo "CONFIG_TOOLCHAIN_LIBC_USE_MUSL=y" >> minimal.config
-        echo "CONFIG_BUSYBOX_CUSTOM=y" >> minimal.config
-        echo "CONFIG_PACKAGE_base-files=y" >> minimal.config
-        echo "CONFIG_PACKAGE_busybox=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libc=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libgcc=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libpthread=y" >> minimal.config
-        echo "CONFIG_PACKAGE_librt=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libstdcpp=y" >> minimal.config
-        echo "CONFIG_PACKAGE_kmod-veth=y" >> minimal.config
-        echo "CONFIG_PACKAGE_kmod-br-netfilter=y" >> minimal.config
-        echo "CONFIG_PACKAGE_kmod-nf-conntrack=y" >> minimal.config
-        echo "CONFIG_PACKAGE_kmod-nf-conntrack-netlink=y" >> minimal.config
-        echo "CONFIG_PACKAGE_kmod-nf-nat=y" >> minimal.config
-        echo "CONFIG_PACKAGE_kmod-ipt-core=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libopenssl=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libcurl=y" >> minimal.config
-        echo "CONFIG_PACKAGE_zlib=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libatomic=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libjson-c=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libpcre=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libselinux=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libseccomp=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libdevmapper=y" >> minimal.config
-        echo "CONFIG_PACKAGE_libnetwork=y" >> minimal.config
-        echo "CONFIG_PACKAGE_curl=y" >> minimal.config
-        echo "CONFIG_PACKAGE_wget=y" >> minimal.config
-        echo "CONFIG_PACKAGE_iptables=y" >> minimal.config
-        echo "CONFIG_PACKAGE_iptables-mod-extra=y" >> minimal.config
-        echo "CONFIG_TARGET_ROOTFS_SQUASHFS=n" >> minimal.config
-        echo "CONFIG_TARGET_IMAGES=n" >> minimal.config
-        echo "CONFIG_IB=n" >> minimal.config
-
-    - name: Initialize environment
-      run: |
-        echo "=== Install build dependencies ==="
         sudo apt-get update
-        sudo apt-get install -y \
-          build-essential ccache curl \
-          flex gawk gettext git libncurses5-dev libssl-dev \
-          make patch pkgconf python3 python3-pip \
-          rsync subversion unzip wget zlib1g-dev
-        
-        sudo fallocate -l 4G /swapfile
-        sudo chmod 600 /swapfile
-        sudo mkswap /swapfile
-        sudo swapon /swapfile
-        
-        echo "Memory info:"
-        free -h
+        sudo apt-get install -y build-essential git wget curl unzip \
+          libncurses5-dev libncursesw5-dev zlib1g-dev gawk flex gettext \
+          libssl-dev python3 python3-distutils
 
-    - name: Configure build cache
+    # 拉取 OpenWrt 源码
+    - name: Clone OpenWrt
       run: |
-        sudo mkdir -p $CCACHE_DIR
-        sudo chown -R $USER:$GROUPS $CCACHE_DIR
-        echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
-        ccache -o compression=true
-        ccache -o max_size=1G
-        ccache -s
-
-    - name: Clone source code
-      run: |
-        echo "=== Clone source code ==="
-        git clone --depth=1 --filter=blob:limit=1M $REPO_URL -b $REPO_BRANCH openwrt
-        echo "Disk after clone:"
-        df -h
-
-    - name: Configure feeds
-      run: |
+        git clone https://github.com/openwrt/openwrt.git openwrt
         cd openwrt
-        echo "=== Configure feeds ==="
-        
-        if ! grep -q "passwall2" feeds.conf.default; then
-          echo "src-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git;main" >> feeds.conf.default
-        fi
-        
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Apply minimal config
+    # 配置只编译 docker 和 passwall2
+    - name: Configure Packages
       run: |
         cd openwrt
-        echo "=== Apply minimal config ==="
-        cp ../minimal.config .config
         make defconfig
-        
-        echo "Config summary:"
-        echo "Target arch: $(grep 'CONFIG_TARGET_ARCH_PACKAGES' .config)"
-        echo "Enabled packages: $(grep '^CONFIG_PACKAGE_' .config | wc -l)"
+        # 清空默认配置，只选需要的包
+        sed -i '/CONFIG_PACKAGE_/d' .config
+        echo "CONFIG_PACKAGE_docker=y" >> .config
+        echo "CONFIG_PACKAGE_luci-app-passwall2=y" >> .config
+        make defconfig
 
-    - name: Download toolchain dependencies
+    # 编译
+    - name: Build Packages
       run: |
         cd openwrt
-        echo "=== Download toolchain ==="
-        make toolchain/download -j2
-        make target/linux/download -j2
-        echo "Disk after downloads:"
-        df -h
+        make package/docker/compile V=s -j$(nproc)
+        make package/luci-app-passwall2/compile V=s -j$(nproc)
 
-    - name: Compile toolchain
-      run: |
-        cd openwrt
-        echo "=== Compile toolchain ==="
-        make -j2 tools/compile toolchain/compile
-        echo "Disk after toolchain:"
-        df -h
-
-    - name: Compile Docker packages
-      run: |
-        cd openwrt
-        echo "=== Compile Docker packages ==="
-        
-        make package/feeds/packages/docker/compile -j2 V=0
-        make package/feeds/packages/dockerd/compile -j2 V=0
-        make package/feeds/packages/docker-compose/compile -j2 V=0
-        make package/feeds/packages/luci-app-dockerman/compile -j2 V=0
-        make package/feeds/packages/luci-lib-docker/compile -j2 V=0
-        make package/feeds/packages/luci-i18n-dockerman-zh-cn/compile -j2 V=0
-        make package/feeds/packages/containerd/compile -j2 V=0
-        make package/feeds/packages/runc/compile -j2 V=0
-        make package/feeds/packages/tini/compile -j2 V=0
-        
-        echo "Docker compilation complete"
-        sudo sync
-        echo 3 | sudo tee /proc/sys/vm/drop_caches
-
-    - name: Compile Passwall2 packages
-      run: |
-        cd openwrt
-        echo "=== Compile Passwall2 packages ==="
-        
-        make
+    # 上传编译结果
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: sl3000-packages
+        path: openwrt/bin/packages/
