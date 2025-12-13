@@ -16,7 +16,7 @@
 
     memory@40000000 {
         device_type = "memory";
-        reg = <0x40000000 0x40000000>;
+        reg = <0x40000000 0x40000000>; /* 1GB */
     };
 
     leds {
@@ -49,9 +49,28 @@
     };
 };
 
-&uart0 { status = "okay"; };
-&wifi  { status = "okay"; };
-&eth   { status = "okay"; };
-&mdio  { status = "okay"; };
-&usb_phy { status = "okay"; };
-&xhci { status = "okay"; };
+/* UART */
+&uart0 {
+    status = "okay";
+};
+
+/* WiFi */
+&wifi {
+    status = "okay";
+    mediatek,mtd-eeprom = <&factory 0x0>;
+};
+
+/* Ethernet */
+&eth {
+    status = "okay";
+};
+
+&mdio {
+    status = "okay";
+};
+
+/* ✅ USB 全部移除，不启用 USB PHY、不启用 xHCI */
+/* 以下节点不再出现：
+   &usb_phy
+   &xhci
+*/
