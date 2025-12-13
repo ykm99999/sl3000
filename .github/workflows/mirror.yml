@@ -34,4 +34,4 @@ jobs:
 
       - name: Push to your repo
         run: |
-          git push -f https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }} openwrt-25.12
+          git push -f https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }} HEAD:openwrt-25.12
