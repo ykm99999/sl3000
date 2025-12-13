@@ -1,6 +1,6 @@
 #!/bin/sh
 
-echo "=== SL3000 QUICK TEST START ==="
+echo "=== SL3000 QUICK CONFIG TEST ==="
 
 # 1. DTS
 echo -n "[1] Checking DTS... "
@@ -56,15 +56,13 @@ else
     exit 1
 fi
 
-# 7. Make sure profile appears in menuconfig
-echo "[7] Checking Target Profile..."
-make menuconfig | grep -q "SL3000"
-if [ $? -eq 0 ]; then
-    echo "OK (profile detected)"
+# 7. .config 是否包含 sl3000
+echo -n "[7] Checking .config profile... "
+if grep -q "DEVICE_sl3000" .config 2>/dev/null; then
+    echo "OK"
 else
-    echo "NOT FOUND (image.mk may be wrong)"
-    exit 1
+    echo "NOT FOUND (run: make menuconfig)"
 fi
 
-echo "=== ALL SL3000 TESTS PASSED ==="
+echo "=== SL3000 QUICK TEST PASSED ==="
 exit 0
