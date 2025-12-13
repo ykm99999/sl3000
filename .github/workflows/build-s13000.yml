@@ -8,23 +8,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout your SL3000 overlay repository
+      # 1. Checkout SL3000 overlay
       - name: Checkout SL3000 overlay
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           path: device
 
-      # 2. Checkout OpenWrt source (openwrt-25.12)
+      # 2. Checkout OpenWrt source
       - name: Checkout OpenWrt source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: openwrt-25.12
           repository: openwrt/openwrt
+          ref: openwrt-25.12
           path: openwrt
 
-      # 3. Apply SL3000 overlay into OpenWrt source
+      # 3. Apply overlay
       - name: Apply SL3000 overlay
         run: |
           rsync -av device/target/linux/mediatek/dts/ \
@@ -36,7 +36,7 @@ jobs:
           rsync -av device/target/linux/mediatek/filogic/ \
                 openwrt/target/linux/mediatek/filogic/
 
-      # 4. Optimize disk space
+      # 4. Optimize disk
       - name: Optimize Disk
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
@@ -44,7 +44,7 @@ jobs:
           sudo swapoff -a || true
           sudo rm -f /swapfile || true
 
-      # 5. Install build dependencies
+      # 5. Install dependencies
       - name: Install Dependencies
         run: |
           sudo apt update
@@ -59,11 +59,11 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 7. Apply SL3000 .config (no USB)
+      # 7. Apply .config (无 USB)
       - name: Apply SL3000 .config
         working-directory: openwrt
         run: |
-          cat > .config << 'EOF'
+          cat << 'EOF' > .config
 CONFIG_TARGET_mediatek=y
 CONFIG_TARGET_mediatek_filogic=y
 CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000=y
@@ -95,9 +95,6 @@ CONFIG_PACKAGE_luci-theme-bootstrap=y
 CONFIG_PACKAGE_luci-app-opkg=y
 CONFIG_PACKAGE_luci-proto-ppp=y
 CONFIG_PACKAGE_luci-proto-ipv6=y
-CONFIG_PACKAGE_luci-lib-ip=y
-CONFIG_PACKAGE_luci-lib-jsonc=y
-CONFIG_PACKAGE_luci-lib-nixio=y
 
 CONFIG_PACKAGE_ppp=y
 CONFIG_PACKAGE_ppp-mod-pppoe=y
@@ -152,9 +149,19 @@ EOF
         run: |
           make -j$(nproc) || make -j1 V=s
 
-      # 9. Upload firmware artifacts
+      # 9. Upload artifacts
       - name: Upload Firmware
         uses: actions/upload-artifact@v4
         with:
           name: sl3000-firmware
           path: openwrt/bin/targets/
+
+      # 10. Auto Release
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: sl3000-$(date +'%Y%m%d-%H%M')
+          name: "SL3000 Firmware $(date +'%Y-%m-%d %H:%M')"
+          files: openwrt/bin/targets/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
