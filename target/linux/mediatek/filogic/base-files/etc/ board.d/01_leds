@@ -1,0 +1,4 @@
+sl3000)
+    ucidef_set_led_netdev "wan" "WAN" "sl3000:blue:wan" "wan"
+    ucidef_set_led_netdev "lan" "LAN" "sl3000:green:lan" "lan"
+    ;;
