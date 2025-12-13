@@ -1,0 +1,150 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/dts-v1/;
+
+#include "mt7981.dtsi"
+
+/ {
+	model = "Siluo SL-3000";
+	compatible = "siluo,sl3000", "mediatek,mt7981";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x0 0x40000000 0x0 0x40000000>; /* 1GB DDR4 */
+	};
+
+	aliases {
+		serial0 = &uart0;
+		ethernet0 = &gmac0;
+		ethernet1 = &gmac1;
+		led-boot = &led_status;
+		led-failsafe = &led_status;
+		led-running = &led_status;
+		led-upgrade = &led_status;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led_status: status {
+			label = "sl3000:blue:status";
+			gpios = <&gpio 10 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	keys {
+		compatible = "gpio-keys";
+
+		reset {
+			label = "reset";
+			linux,code = <KEY_RESTART>;
+			gpios = <&gpio 9 GPIO_ACTIVE_LOW>;
+			debounce-interval = <60>;
+		};
+	};
+};
+
+/* UART */
+&uart0 {
+	status = "okay";
+};
+
+/* eMMC */
+&mmc0 {
+	status = "okay";
+
+	bus-width = <8>;
+	max-frequency = <200000000>;
+	cap-mmc-highspeed;
+	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
+	hs400-ds-delay = <0x14882>;
+	non-removable;
+
+	vmmc-supply = <&mt7981_vemc_1v8>;
+	vqmmc-supply = <&mt7981_vio18>;
+
+	mediatek,bootpart-no = <1>;
+
+	/* 分区表（可根据实际调整） */
+	partition@0 {
+		label = "bl2";
+		reg = <0x0 0x00000000 0x0 0x00080000>;
+	};
+
+	partition@80000 {
+		label = "factory";
+		reg = <0x0 0x00080000 0x0 0x00200000>;
+	};
+
+	partition@280000 {
+		label = "fip";
+		reg = <0x0 0x00280000 0x0 0x00400000>;
+	};
+
+	partition@680000 {
+		label = "ubi";
+		reg = <0x0 0x00680000 0x0 0x3F980000>;
+	};
+};
+
+/* SPI-NOR（如果存在） */
+&spi0 {
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+		spi-max-frequency = <52000000>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "u-boot-env";
+				reg = <0x00000000 0x00020000>;
+			};
+		};
+	};
+};
+
+/* Ethernet */
+&gmac0 {
+	status = "okay";
+	phy-mode = "sgmii";
+	mediatek,fixed-link = <1 1 1000 0 0>;
+};
+
+&gmac1 {
+	status = "okay";
+	phy-mode = "sgmii";
+	mediatek,fixed-link = <1 1 1000 0 0>;
+};
+
+/* WiFi MT7976CN */
+&wifi {
+	status = "okay";
+
+	mediatek,mtd-eeprom = <&factory 0x0>;
+	mediatek,disable-5g;
+};
+
+/* PCIe（如果 WiFi 走 PCIe） */
+&pcie {
+	status = "okay";
+};
+
+/* GPIO */
+&gpio {
+	status = "okay";
+};
+
+/* 温控 */
+&thermal {
+	status = "okay";
+};
