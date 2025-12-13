@@ -1,34 +1,51 @@
-name: SL3000 Quick Test
+name: Sync Mediatek Source
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - sl3000
+  schedule:
+    - cron: "0 3 * * *"   # 每天凌晨 3 点自动同步，可删
 
 jobs:
-  quick-test:
+  sync:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      # 1. Checkout 你的仓库（目标仓库）
+      - name: Checkout target repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          path: repo
 
-      - name: Fix permissions
+      # 2. Clone OpenWrt 官方源码（源仓库）
+      - name: Clone OpenWrt source
         run: |
-          chmod +x scripts/check-sl3000.sh || true
-          chmod +x scripts/quick-test-sl3000.sh || true
+          git clone --depth=1 https://github.com/openwrt/openwrt.git openwrt
 
-      - name: Run SL3000 quick test
+      # 3. 清理旧的 mediatek 目录
+      - name: Clean old mediatek directory
         run: |
-          echo "=== Running SL3000 Quick Test ==="
-          if [ -f scripts/quick-test-sl3000.sh ]; then
-            ./scripts/quick-test-sl3000.sh
-          elif [ -f scripts/check-sl3000.sh ]; then
-            ./scripts/check-sl3000.sh
-          else
-            echo "ERROR: No test script found"
-            exit 1
-          fi
+          rm -rf repo/target/linux/mediatek
+          mkdir -p repo/target/linux/mediatek
+
+      # 4. 复制你指定的路径
+      - name: Copy selected mediatek source
+        run: |
+          rsync -av openwrt/target/linux/mediatek/dts/ \
+                repo/target/linux/mediatek/dts/
+
+          rsync -av openwrt/target/linux/mediatek/image/ \
+                repo/target/linux/mediatek/image/
+
+          rsync -av openwrt/target/linux/mediatek/filogic/ \
+                repo/target/linux/mediatek/filogic/
+
+      # 5. 提交并推送到你的仓库
+      - name: Commit and push changes
+        working-directory: repo
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Sync mediatek source" || echo "No changes"
+          git push
