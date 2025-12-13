@@ -1,0 +1,57 @@
+/dts-v1/;
+
+/include/ "mt7981.dtsi"
+
+/ {
+    model = "SL3000 Router (MT7981)";
+    compatible = "sl,sl3000", "mediatek,mt7981";
+
+    aliases {
+        serial0 = &uart0;
+    };
+
+    chosen {
+        stdout-path = "serial0:115200n8";
+    };
+
+    memory@40000000 {
+        device_type = "memory";
+        reg = <0x40000000 0x40000000>;
+    };
+
+    leds {
+        compatible = "gpio-leds";
+
+        status {
+            label = "sl3000:blue:status";
+            gpios = <&gpio 10 GPIO_ACTIVE_LOW>;
+        };
+
+        wan {
+            label = "sl3000:blue:wan";
+            gpios = <&gpio 11 GPIO_ACTIVE_LOW>;
+        };
+
+        lan {
+            label = "sl3000:green:lan";
+            gpios = <&gpio 12 GPIO_ACTIVE_LOW>;
+        };
+    };
+
+    keys {
+        compatible = "gpio-keys";
+
+        reset {
+            label = "reset";
+            linux,code = <KEY_RESTART>;
+            gpios = <&gpio 9 GPIO_ACTIVE_LOW>;
+        };
+    };
+};
+
+&uart0 { status = "okay"; };
+&wifi  { status = "okay"; };
+&eth   { status = "okay"; };
+&mdio  { status = "okay"; };
+&usb_phy { status = "okay"; };
+&xhci { status = "okay"; };
