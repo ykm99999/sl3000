@@ -8,27 +8,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout device files (default branch)
-      - name: Checkout device files
+      # 1. Checkout your SL3000 overlay repository
+      - name: Checkout SL3000 overlay
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           path: device
 
-      # 2. Checkout OpenWrt source (openwrt-25.12 branch)
+      # 2. Checkout OpenWrt source (openwrt-25.12)
       - name: Checkout OpenWrt source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: openwrt-25.12
+          repository: openwrt/openwrt
           path: openwrt
 
-      # 3. Copy SL3000 device files into OpenWrt source
-      - name: Apply SL3000 device files
+      # 3. Apply SL3000 overlay into OpenWrt source
+      - name: Apply SL3000 overlay
         run: |
-          rsync -av device/ openwrt/
+          rsync -av device/target/linux/mediatek/dts/ \
+                openwrt/target/linux/mediatek/dts/
 
-      # 4. Optimize disk
+          rsync -av device/target/linux/mediatek/image/ \
+                openwrt/target/linux/mediatek/image/
+
+          rsync -av device/target/linux/mediatek/filogic/ \
+                openwrt/target/linux/mediatek/filogic/
+
+      # 4. Optimize disk space
       - name: Optimize Disk
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
@@ -36,7 +44,7 @@ jobs:
           sudo swapoff -a || true
           sudo rm -f /swapfile || true
 
-      # 5. Install dependencies
+      # 5. Install build dependencies
       - name: Install Dependencies
         run: |
           sudo apt update
@@ -51,10 +59,91 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 7. Configure
-      - name: Configure SL3000
+      # 7. Apply SL3000 .config (no USB)
+      - name: Apply SL3000 .config
         working-directory: openwrt
         run: |
+          cat > .config << 'EOF'
+CONFIG_TARGET_mediatek=y
+CONFIG_TARGET_mediatek_filogic=y
+CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000=y
+
+CONFIG_PACKAGE_base-files=y
+CONFIG_PACKAGE_busybox=y
+CONFIG_PACKAGE_ca-bundle=y
+CONFIG_PACKAGE_ca-certificates=y
+CONFIG_PACKAGE_dnsmasq-full=y
+CONFIG_PACKAGE_dropbear=y
+CONFIG_PACKAGE_firewall4=y
+CONFIG_PACKAGE_iptables-nft=y
+CONFIG_PACKAGE_iwinfo=y
+CONFIG_PACKAGE_logd=y
+CONFIG_PACKAGE_mtd=y
+CONFIG_PACKAGE_netifd=y
+CONFIG_PACKAGE_odhcp6c=y
+CONFIG_PACKAGE_odhcpd-ipv6only=y
+CONFIG_PACKAGE_opkg=y
+CONFIG_PACKAGE_uci=y
+CONFIG_PACKAGE_urandom-seed=y
+CONFIG_PACKAGE_urngd=y
+
+CONFIG_PACKAGE_luci=y
+CONFIG_PACKAGE_luci-base=y
+CONFIG_PACKAGE_luci-compat=y
+CONFIG_PACKAGE_luci-mod-admin-full=y
+CONFIG_PACKAGE_luci-theme-bootstrap=y
+CONFIG_PACKAGE_luci-app-opkg=y
+CONFIG_PACKAGE_luci-proto-ppp=y
+CONFIG_PACKAGE_luci-proto-ipv6=y
+CONFIG_PACKAGE_luci-lib-ip=y
+CONFIG_PACKAGE_luci-lib-jsonc=y
+CONFIG_PACKAGE_luci-lib-nixio=y
+
+CONFIG_PACKAGE_ppp=y
+CONFIG_PACKAGE_ppp-mod-pppoe=y
+CONFIG_PACKAGE_pppoe-discovery=y
+CONFIG_PACKAGE_ipv6helper=y
+
+CONFIG_PACKAGE_kmod-mt7981-firmware=y
+CONFIG_PACKAGE_kmod-mt76=y
+CONFIG_PACKAGE_kmod-mt76-core=y
+CONFIG_PACKAGE_kmod-mt76-connac=y
+CONFIG_PACKAGE_kmod-mt76-mt7981=y
+CONFIG_PACKAGE_wireless-regdb=y
+CONFIG_PACKAGE_wpad-basic-mbedtls=y
+
+CONFIG_PACKAGE_kmod-mediatek_eth=y
+CONFIG_PACKAGE_kmod-mediatek_hnat=y
+CONFIG_PACKAGE_kmod-nft-offload=y
+CONFIG_PACKAGE_kmod-pppoe=y
+CONFIG_PACKAGE_kmod-pppox=y
+CONFIG_PACKAGE_kmod-ipt-nat=y
+
+CONFIG_PACKAGE_kmod-gpio-button-hotplug=y
+CONFIG_PACKAGE_kmod-leds-gpio=y
+
+CONFIG_PACKAGE_htop=y
+CONFIG_PACKAGE_vim-full=y
+CONFIG_PACKAGE_curl=y
+CONFIG_PACKAGE_wget-ssl=y
+CONFIG_PACKAGE_tcpdump-mini=y
+
+CONFIG_PACKAGE_libzstd=y
+CONFIG_PACKAGE_zstd=y
+
+CONFIG_PACKAGE_libopenssl=y
+CONFIG_PACKAGE_libwolfssl=y
+CONFIG_PACKAGE_libmbedtls=y
+
+CONFIG_BUSYBOX_DEFAULT_FEATURE_EDITING_HISTORY=256
+CONFIG_BUSYBOX_DEFAULT_FEATURE_EDITING_SAVEHISTORY=y
+CONFIG_BUSYBOX_DEFAULT_FEATURE_EDITING_SAVE_ON_EXIT=y
+
+CONFIG_TARGET_MULTI_PROFILE=y
+CONFIG_TARGET_PER_DEVICE_ROOTFS=y
+CONFIG_TARGET_ROOTFS_INITRAMFS=n
+EOF
+
           make defconfig
 
       # 8. Build firmware
@@ -63,7 +152,7 @@ jobs:
         run: |
           make -j$(nproc) || make -j1 V=s
 
-      # 9. Upload firmware
+      # 9. Upload firmware artifacts
       - name: Upload Firmware
         uses: actions/upload-artifact@v4
         with:
