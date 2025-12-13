@@ -1,68 +1,34 @@
-#!/bin/sh
+name: SL3000 Quick Test
 
-echo "=== SL3000 QUICK CONFIG TEST ==="
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - sl3000
 
-# 1. DTS
-echo -n "[1] Checking DTS... "
-if [ -f target/linux/mediatek/files-6.12/arch/arm64/boot/dts/mediatek/mt7981-sl3000.dts ]; then
-    echo "OK"
-else
-    echo "MISSING"
-    exit 1
-fi
+jobs:
+  quick-test:
+    runs-on: ubuntu-latest
 
-# 2. image.mk
-echo -n "[2] Checking image.mk device entry... "
-if grep -q "sl3000" target/linux/mediatek/image/mt7981.mk; then
-    echo "OK"
-else
-    echo "MISSING"
-    exit 1
-fi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-# 3. EEPROM script
-echo -n "[3] Checking EEPROM script... "
-if [ -f package/firmware/mediatek/mt7981-sl3000-eeprom.sh ]; then
-    echo "OK"
-else
-    echo "MISSING"
-    exit 1
-fi
+      - name: Fix permissions
+        run: |
+          chmod +x scripts/check-sl3000.sh || true
+          chmod +x scripts/quick-test-sl3000.sh || true
 
-# 4. Network config
-echo -n "[4] Checking 02_network... "
-if grep -q "sl3000" target/linux/mediatek/base-files/etc/board.d/02_network; then
-    echo "OK"
-else
-    echo "MISSING"
-    exit 1
-fi
-
-# 5. LED config
-echo -n "[5] Checking 01_leds... "
-if grep -q "sl3000" target/linux/mediatek/base-files/etc/board.d/01_leds; then
-    echo "OK"
-else
-    echo "MISSING"
-    exit 1
-fi
-
-# 6. Keys config
-echo -n "[6] Checking 01_gpio_keys... "
-if grep -q "sl3000" target/linux/mediatek/base-files/etc/board.d/01_gpio_keys; then
-    echo "OK"
-else
-    echo "MISSING"
-    exit 1
-fi
-
-# 7. .config（方案 A：不强制要求）
-echo -n "[7] Checking .config profile... "
-if grep -q "DEVICE_sl3000" .config 2>/dev/null; then
-    echo "OK"
-else
-    echo "SKIPPED (方案A：不检查 .config)"
-fi
-
-echo "=== SL3000 QUICK TEST PASSED ==="
-exit 0
+      - name: Run SL3000 quick test
+        run: |
+          echo "=== Running SL3000 Quick Test ==="
+          if [ -f scripts/quick-test-sl3000.sh ]; then
+            ./scripts/quick-test-sl3000.sh
+          elif [ -f scripts/check-sl3000.sh ]; then
+            ./scripts/check-sl3000.sh
+          else
+            echo "ERROR: No test script found"
+            exit 1
+          fi
