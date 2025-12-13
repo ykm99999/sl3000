@@ -1,0 +1,34 @@
+name: SL3000 Quick Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - sl3000
+
+jobs:
+  quick-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fix permissions
+        run: |
+          chmod +x scripts/check-sl3000.sh || true
+          chmod +x scripts/quick-test-sl3000.sh || true
+
+      - name: Run SL3000 quick test
+        run: |
+          echo "=== Running SL3000 Quick Test ==="
+          if [ -f scripts/quick-test-sl3000.sh ]; then
+            ./scripts/quick-test-sl3000.sh
+          elif [ -f scripts/check-sl3000.sh ]; then
+            ./scripts/check-sl3000.sh
+          else
+            echo "ERROR: No test script found"
+            exit 1
+          fi
