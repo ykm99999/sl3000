@@ -1,0 +1,37 @@
+name: Mirror ImmortalWrt 25.12
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout your repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Init repo if empty
+        run: |
+          if [ ! -d .git ]; then
+            git init
+          fi
+
+      - name: Add upstream
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/immortalwrt/immortalwrt.git
+          git fetch upstream openwrt-25.12
+
+      - name: Hard reset to upstream/openwrt-25.12
+        run: |
+          git checkout -B openwrt-25.12
+          git reset --hard upstream/openwrt-25.12
+
+      - name: Push to your repo
+        run: |
+          git push -f https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }} openwrt-25.12
