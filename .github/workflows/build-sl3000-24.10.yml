@@ -11,11 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 拉取你的 SL3000 仓库
       - name: Checkout SL3000 repo
         uses: actions/checkout@v4
 
-      # 2. 克隆 ImmortalWrt 24.10 源码
       - name: Clone ImmortalWrt 24.10
         run: |
           git clone https://github.com/immortalwrt/immortalwrt.git -b openwrt-24.10 immortalwrt
@@ -23,27 +21,25 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 3. 覆盖三件套（严格使用你指定的路径）
+      # ✅ 安装 dtc（修复你的错误）
+      - name: Install dtc for DTS check
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y device-tree-compiler
+
       - name: Apply SL3000 device files
         run: |
-          # DTS
           mkdir -p immortalwrt/target/linux/mediatek/dts/
-          cp dts/mt7981b-sl3000-emmc.dts \
-             immortalwrt/target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts
-
-          # mk（image/filogic.mk）
+          cp dts/mt7981b-sl3000-emmc.dts immortalwrt/target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts
           cp image/filogic.mk immortalwrt/target/linux/mediatek/image/filogic.mk
-
-          # config（.config）
           cp .config immortalwrt/.config
 
-      # 4. 运行增强版自检脚本
+      # ✅ 运行增强版自检脚本
       - name: Run SL3000 24.10 enhanced check
         run: |
           chmod +x scripts/check-sl3000-24.10.sh
           ./scripts/check-sl3000-24.10.sh
 
-      # 5. 磁盘优化
       - name: Expand disk space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -53,7 +49,6 @@ jobs:
           sudo apt-get clean
           df -h
 
-      # 6. dl 缓存
       - name: Cache dl
         uses: actions/cache@v4
         with:
@@ -62,7 +57,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-dl-24-10-
 
-      # 7. ccache 缓存
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -71,19 +65,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ccache-24-10-
 
-      # 8. 构建固件
       - name: Build ImmortalWrt 24.10
         run: |
           cd immortalwrt
           make defconfig
           make -j$(nproc)
 
-      # 9. 输出固件目录
       - name: List firmware
         run: |
           ls -R immortalwrt/bin/targets/mediatek/filogic || true
 
-      # 10. 上传构建产物
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
