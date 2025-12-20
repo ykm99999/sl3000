@@ -31,13 +31,14 @@ jobs:
         sudo mkdir -p /mnt/immortalwrt
         sudo chown $USER:$USER /mnt/immortalwrt
 
-    # ✅ 2. 安装构建依赖
+    # ✅ 2. 安装构建依赖（已加入 dtc 修复）
     - name: Install Dependencies
       run: |
         sudo apt update
         sudo apt install -y build-essential clang flex bison g++ gawk \
           gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev \
-          python3 python3-distutils rsync unzip zlib1g-dev file wget ccache
+          python3 python3-distutils rsync unzip zlib1g-dev file wget ccache \
+          device-tree-compiler
 
     # ✅ 3. 启用 ccache（加速 3～5 倍）
     - name: Enable ccache
@@ -75,7 +76,7 @@ jobs:
         cp -f sl3000/filogic.mk /mnt/immortalwrt/target/linux/mediatek/image/
         cp -f sl3000/config-23.05.config /mnt/immortalwrt/.config
 
-    # ✅ 7. 自检脚本（方案 B + mk 检查 + config 检查）
+    # ✅ 7. 自检脚本（含 DTS 语法检查）
     - name: Add SL3000 Self-Check Script
       run: |
         mkdir -p /mnt/immortalwrt/scripts
