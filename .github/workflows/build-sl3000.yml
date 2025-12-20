@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 拉取你自己的仓库（三件套 + config）
+      # 1. 拉取你自己的仓库（三件套 + config + 自检脚本）
       - name: Checkout SL3000 repo
         uses: actions/checkout@v4
         with:
@@ -25,19 +25,24 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 3. 覆盖三件套到官方源码
+      # 3. 覆盖三件套到官方源码（最终修复版）
       - name: Apply SL3000 device files
         run: |
-          # mt7981.mk
+          # ✅ 创建 image 目录（23.05 默认不存在）
+          mkdir -p openwrt/target/linux/mediatek/image/
+
+          # ✅ 复制 mt7981.mk
           cp myrepo/target/linux/mediatek/image/mt7981.mk \
              openwrt/target/linux/mediatek/image/
 
-          # DTS
+          # ✅ 创建 DTS 目录
           mkdir -p openwrt/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/
+
+          # ✅ 复制 DTS
           cp myrepo/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/*.dts \
              openwrt/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/
 
-          # ✅ 直接使用你的 sl3000.config 作为最终 .config（关键）
+          # ✅ 使用你的 sl3000.config 作为最终 .config（和 25.12 完全一致）
           cp myrepo/configs/sl3000.config openwrt/.config
 
       # 4. 运行 SL3000 环境检测脚本（检查 openwrt/ 真实构建环境）
