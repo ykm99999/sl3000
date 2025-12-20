@@ -15,7 +15,7 @@ jobs:
       - name: Checkout SL3000 repo
         uses: actions/checkout@v4
 
-      # 2. 克隆 OpenWrt 23.05
+      # 2. 克隆 OpenWrt 23.05 源码
       - name: Clone OpenWrt 23.05
         run: |
           git clone --branch openwrt-23.05 https://github.com/openwrt/openwrt.git openwrt
@@ -23,27 +23,29 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 3. 覆盖三件套 + 使用 sl3000.config 作为 .config
+      # 3. 覆盖三件套（严格对齐你仓库的官方路径）
       - name: Apply SL3000 device files
         run: |
           # image
           mkdir -p openwrt/target/linux/mediatek/image/
-          cp image/mt7981.mk openwrt/target/linux/mediatek/image/
+          cp target/linux/mediatek/image/mt7981.mk \
+             openwrt/target/linux/mediatek/image/
 
-          # DTS（23.05 文件路径）
+          # DTS
           mkdir -p openwrt/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/
-          cp dts/*.dts openwrt/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/
+          cp target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/*.dts \
+             openwrt/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/
 
-          # 使用仓库 configs/sl3000.config 作为 .config
+          # 使用仓库 configs/sl3000.config 作为最终 .config
           cp configs/sl3000.config openwrt/.config
 
-      # 4. 运行环境自检
+      # 4. 自检（必须在 openwrt 下执行）
       - name: Run SL3000 environment check
         run: |
           chmod +x scripts/check-sl3000-env.sh
           ./scripts/check-sl3000-env.sh
 
-      # 5. 磁盘优化
+      # 5. 磁盘优化（完整）
       - name: Expand disk space
         run: |
           sudo rm -rf /usr/share/dotnet
