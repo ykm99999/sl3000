@@ -93,7 +93,7 @@ jobs:
 
         chmod +x openwrt/check-sl3000-env.sh
 
-    - name: 强制启用 SL3000 + 合并你的 sl3000.config
+    - name: 强制启用 SL3000 + 合并你的 sl3000.config（最终正确版）
       run: |
         cd openwrt
 
@@ -102,8 +102,8 @@ jobs:
         echo "CONFIG_TARGET_mediatek_filogic=y" >> .config
         echo "CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000-emmc=y" >> .config
 
-        # 再把你的 sl3000.config 追加进去（不能覆盖）
-        cat sl3000.base >> .config
+        # ✅ 关键：直接从你的仓库追加 config，路径绝对正确
+        cat ../myrepo/configs/sl3000.config >> .config
 
         # 生成最终配置
         make defconfig
