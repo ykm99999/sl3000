@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
 /dts-v1/;
 
 #include "mt7981.dtsi"
@@ -11,7 +10,7 @@
 
     memory {
         device_type = "memory";
-        reg = <0x40000000 0x40000000>; /* 1GB DDR4 */
+        reg = <0x40000000 0x40000000>;
     };
 
     chosen {
@@ -47,17 +46,14 @@
     };
 };
 
-/* UART */
 &uart0 {
     status = "okay";
 };
 
-/* GPIO 控制器 */
 &gpio {
     status = "okay";
 };
 
-/* SPI NOR 32MB */
 &spi0 {
     status = "okay";
 
@@ -67,12 +63,9 @@
         spi-max-frequency = <52000000>;
         #address-cells = <1>;
         #size-cells = <1>;
-
-        /* 分区你后面按实际需求再补，这里留空也不会编译报错 */
     };
 };
 
-/* eMMC 128GB */
 &mmc0 {
     bus-width = <8>;
     max-frequency = <200000000>;
@@ -81,12 +74,10 @@
     status = "okay";
 };
 
-/* 内置 WiFi (MT7981) */
 &wifi {
     status = "okay";
 };
 
-/* 外挂 WiFi (大概率 MT7976CN，经由 PCIe，这里先占位) */
 &pcie {
     status = "okay";
 
@@ -96,18 +87,15 @@
     };
 };
 
-/* MDIO + MT7531 交换机（Filogic 标准写法，占位版） */
 &mdio {
     status = "okay";
 
     switch@0 {
         compatible = "mediatek,mt7531";
         reg = <0>;
-        /* reset-gpios / interrupt 等实际 GPIO 你后续对齐原厂 DTS 再细化 */
     };
 };
 
-/* Ethernet MAC，走 MT7531 */
 &eth {
     status = "okay";
 
@@ -115,6 +103,5 @@
         compatible = "mediatek,eth-mac";
         reg = <0>;
         phy-mode = "sgmii";
-        /* 这里的 phy-handle / fixed-link 需要根据真实走线再补，这里保持最小可编译 */
     };
 };
