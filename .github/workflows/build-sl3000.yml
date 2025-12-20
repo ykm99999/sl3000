@@ -11,13 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 拉取你自己的仓库（三件套 + config + 自检脚本）
       - name: Checkout SL3000 repo
         uses: actions/checkout@v4
         with:
           path: myrepo
 
-      # 2. 克隆 OpenWrt 23.05 官方源码
       - name: Clone OpenWrt 23.05
         run: |
           git clone --branch openwrt-23.05 https://github.com/openwrt/openwrt.git openwrt
@@ -25,88 +23,23 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # 3. 覆盖三件套到官方源码（最终修复版）
       - name: Apply SL3000 device files
         run: |
-          # ✅ 创建 image 目录（23.05 默认不存在）
           mkdir -p openwrt/target/linux/mediatek/image/
+          cp myrepo/image/mt7981.mk openwrt/target/linux/mediatek/image/
 
-          # ✅ 复制 mt7981.mk
-          cp myrepo/target/linux/mediatek/image/mt7981.mk \
-             openwrt/target/linux/mediatek/image/
-
-          # ✅ 创建 DTS 目录
           mkdir -p openwrt/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/
+          cp myrepo/dts/*.dts openwrt/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/
 
-          # ✅ 复制 DTS
-          cp myrepo/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/*.dts \
-             openwrt/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/
-
-          # ✅ 使用你的 sl3000.config 作为最终 .config（和 25.12 完全一致）
           cp myrepo/configs/sl3000.config openwrt/.config
 
-      # 4. 运行 SL3000 环境检测脚本（检查 openwrt/ 真实构建环境）
       - name: Run SL3000 environment check
         run: |
           chmod +x myrepo/scripts/check-sl3000-env.sh
-          cd openwrt
-          ../myrepo/scripts/check-sl3000-env.sh
+          myrepo/scripts/check-sl3000-env.sh
 
-      # 5. 磁盘优化
-      - name: Expand disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          df -h
-
-      # 6. ccache 缓存
-      - name: Cache ccache
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ${{ runner.os }}-ccache-${{ github.run_id }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-
-
-      # 7. dl 缓存
-      - name: Cache dl
-        uses: actions/cache@v4
-        with:
-          path: openwrt/dl
-          key: ${{ runner.os }}-dl-${{ github.run_id }}
-          restore-keys: |
-            ${{ runner.os }}-dl-
-
-      # 8. 自动创建 tag（不会 403）
-      - name: Create tag
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          TAG="v$(date +'%Y%m%d')-${{ github.run_number }}"
-          git tag $TAG
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} $TAG
-          echo "TAG=$TAG" >> $GITHUB_ENV
-
-      # 9. 构建固件
       - name: Build firmware
         run: |
           cd openwrt
           make defconfig
           make -j$(nproc)
-
-      # 10. 生成 sha256sum
-      - name: Generate sha256sum
-        run: |
-          cd openwrt/bin/targets/mediatek/filogic
-          sha256sum *.bin > sha256sum.txt
-
-      # 11. 发布 Release
-      - name: Release firmware
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG }}
-          name: "SL3000 OpenWrt 23.05 ${{ env.TAG }}"
-          files: |
-            openwrt/bin/targets/mediatek/filogic/*.bin
-            openwrt/bin/targets/mediatek/filogic/sha256sum.txt
