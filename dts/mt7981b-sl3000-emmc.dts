@@ -2,6 +2,8 @@
 /dts-v1/;
 
 #include "mt7981.dtsi"
+#include <dt-bindings/input/linux-event-codes.h>
+#include <dt-bindings/gpio/gpio.h>
 
 / {
     compatible = "siluoxing,sl3000-emmc", "mediatek,mt7981";
@@ -9,7 +11,7 @@
 
     memory {
         device_type = "memory";
-        reg = <0x40000000 0x40000000>; // 1GB DDR4
+        reg = <0x40000000 0x40000000>; /* 1GB DDR4 */
     };
 
     chosen {
@@ -24,7 +26,6 @@
         led-upgrade = &led_status;
     };
 
-    /* LED 控制器节点（自己定义一个 gpio-leds） */
     leds {
         compatible = "gpio-leds";
 
@@ -35,7 +36,6 @@
         };
     };
 
-    /* 按键节点 */
     keys {
         compatible = "gpio-keys";
 
@@ -57,7 +57,7 @@
     status = "okay";
 };
 
-/* SPI NOR 32MB: 25Q256FSSIG */
+/* SPI NOR 32MB */
 &spi0 {
     status = "okay";
 
@@ -68,11 +68,11 @@
         #address-cells = <1>;
         #size-cells = <1>;
 
-        /* 这里的分区你后面再按实际情况补 */
+        /* 分区你后面按实际需求再补，这里留空也不会编译报错 */
     };
 };
 
-/* eMMC 128GB: HSEMSDS7D2B128G */
+/* eMMC 128GB */
 &mmc0 {
     bus-width = <8>;
     max-frequency = <200000000>;
@@ -86,12 +86,35 @@
     status = "okay";
 };
 
-/* 外挂 WiFi (MT7976CN) — 先按 pcie 占位 */
+/* 外挂 WiFi (大概率 MT7976CN，经由 PCIe，这里先占位) */
 &pcie {
     status = "okay";
 
     wifi@0,0 {
         compatible = "mediatek,mt76";
         reg = <0 0 0 0 0>;
+    };
+};
+
+/* MDIO + MT7531 交换机（Filogic 标准写法，占位版） */
+&mdio {
+    status = "okay";
+
+    switch@0 {
+        compatible = "mediatek,mt7531";
+        reg = <0>;
+        /* reset-gpios / interrupt 等实际 GPIO 你后续对齐原厂 DTS 再细化 */
+    };
+};
+
+/* Ethernet MAC，走 MT7531 */
+&eth {
+    status = "okay";
+
+    gmac0: mac@0 {
+        compatible = "mediatek,eth-mac";
+        reg = <0>;
+        phy-mode = "sgmii";
+        /* 这里的 phy-handle / fixed-link 需要根据真实走线再补，这里保持最小可编译 */
     };
 };
