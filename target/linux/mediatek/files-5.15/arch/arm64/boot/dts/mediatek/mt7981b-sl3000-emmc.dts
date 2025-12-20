@@ -1,38 +1,107 @@
 /dts-v1/;
 
-#include "mt7981b.dtsi"
+/include/ "mt7981.dtsi"
+/include/ "dt-bindings/gpio/gpio.h"
+/include/ "dt-bindings/input/linux-event-codes.h"
 
-/ {
-	model = "SL3000 eMMC Router";
-	compatible = "sl,sl3000-emmc", "mediatek,mt7981b";
+ / {
+    compatible = "siluoxing,sl3000-emmc", "mediatek,mt7981";
+    model = "Siluoxing SL3000 (MT7981B, eMMC)";
 
-	chosen {
-		bootargs = "console=ttyS0,115200n8";
-	};
+    memory {
+        device_type = "memory";
+        reg = <0x40000000 0x40000000>;
+    };
 
-	memory@40000000 {
-		device_type = "memory";
-		reg = <0x40000000 0x20000000>;
-	};
+    chosen {
+        stdout-path = &uart0;
+        bootargs = "console=ttyS0,115200n8";
+    };
+
+    aliases {
+        led-boot = &led_status;
+        led-failsafe = &led_status;
+        led-running = &led_status;
+        led-upgrade = &led_status;
+    };
+
+    leds {
+        compatible = "gpio-leds";
+
+        led_status: status {
+            label = "sl3000:blue:status";
+            gpios = <&gpio 12 GPIO_ACTIVE_HIGH>;
+            default-state = "on";
+        };
+    };
+
+    keys {
+        compatible = "gpio-keys";
+
+        reset {
+            label = "reset";
+            gpios = <&gpio 0 GPIO_ACTIVE_LOW>;
+            linux,code = <KEY_RESTART>;
+        };
+    };
 };
 
 &uart0 {
-	status = "okay";
+    status = "okay";
 };
 
-&eth {
-	status = "okay";
-	mediatek,eth-mac = "00:11:22:33:44:55";
+&gpio {
+    status = "okay";
 };
 
-&wifi {
-	status = "okay";
+&spi0 {
+    status = "okay";
+
+    flash@0 {
+        compatible = "jedec,spi-nor";
+        reg = <0>;
+        spi-max-frequency = <52000000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+    };
 };
 
 &mmc0 {
-	status = "okay";
-	bus-width = <8>;
-	max-frequency = <52000000>;
-	cap-mmc-highspeed;
-	non-removable;
+    bus-width = <8>;
+    max-frequency = <200000000>;
+    cap-mmc-highspeed;
+    non-removable;
+    status = "okay";
+};
+
+&wifi {
+    status = "okay";
+};
+
+&pcie {
+    status = "okay";
+
+    wifi@0,0 {
+        compatible = "mediatek,mt76";
+        reg = <0 0 0 0 0>;
+    };
+};
+
+&mdio {
+    status = "okay";
+
+    switch@0 {
+        compatible = "mediatek,mt7531";
+        reg = <0>;
+    };
+};
+
+&eth {
+    status = "okay";
+
+    gmac0: mac@0 {
+        compatible = "mediatek,eth-mac";
+        reg = <0>;
+        phy-mode = "sgmii";
+    };
 };
