@@ -1,11 +1,9 @@
 #!/bin/bash
 set -e
 
-# 进入仓库根目录
+# 仓库根目录 -> openwrt
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-
-# openwrt 在仓库根目录下
 OPENWRT_DIR="$ROOT_DIR/openwrt"
 
 cd "$OPENWRT_DIR" || {
