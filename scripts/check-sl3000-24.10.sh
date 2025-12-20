@@ -9,10 +9,12 @@ cd immortalwrt || {
     exit 1
 }
 
-###############################################
-# 1. 检查 DTS 文件
-###############################################
-DTS_FILE="target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts"
+# 计算绝对路径（关键）
+DTS_DIR="$(pwd)/target/linux/mediatek/dts"
+GENERIC_DIR="$(pwd)/target/linux/generic/files/include"
+INC_DIR="$(pwd)/include"
+
+DTS_FILE="$DTS_DIR/mt7981b-sl3000-emmc.dts"
 
 if [ ! -f "$DTS_FILE" ]; then
     echo "❌ DTS 文件不存在：$DTS_FILE"
@@ -21,15 +23,12 @@ else
     echo "✅ DTS 文件存在"
 fi
 
-###############################################
-# 2. DTS 语法检查（带 include 路径）
-###############################################
 echo "→ 正在检查 DTS 语法..."
 
 dtc -I dts -O dtb \
-  -i target/linux/mediatek/dts \
-  -i target/linux/generic/files/include \
-  -i include \
+  -i "$DTS_DIR" \
+  -i "$GENERIC_DIR" \
+  -i "$INC_DIR" \
   "$DTS_FILE" \
   -o /tmp/sl3000.dtb 2>/tmp/dts_err || true
 
