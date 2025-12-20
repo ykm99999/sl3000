@@ -11,7 +11,7 @@ jobs:
     - name: Checkout Repo
       uses: actions/checkout@v4
 
-    # ✅ 1. 磁盘优化（扩容 + 清理）
+    # ✅ 1. 清理磁盘（不再创建 swap）
     - name: Optimize Disk Space
       run: |
         echo "=== 清理 Docker 镜像 ==="
@@ -27,11 +27,9 @@ jobs:
         sudo rm -rf /opt/ghc
         sudo rm -rf /opt/hostedtoolcache
 
-        echo "=== 扩容磁盘到 100GB ==="
-        sudo fallocate -l 60G /swapfile
-        sudo chmod 600 /swapfile
-        sudo mkswap /swapfile
-        sudo swapon /swapfile
+        echo "=== 使用 /mnt 100GB SSD 作为构建目录 ==="
+        sudo mkdir -p /mnt/immortalwrt
+        sudo chown $USER:$USER /mnt/immortalwrt
 
     # ✅ 2. 安装构建依赖
     - name: Install Dependencies
@@ -54,45 +52,45 @@ jobs:
       uses: actions/cache@v4
       with:
         path: |
-          immortalwrt/dl
-          immortalwrt/staging_dir
-          immortalwrt/build_dir
+          /mnt/immortalwrt/dl
+          /mnt/immortalwrt/staging_dir
+          /mnt/immortalwrt/build_dir
           ~/.ccache
         key: sl3000-emmc-23.05-${{ hashFiles('sl3000/*') }}
         restore-keys: |
           sl3000-emmc-23.05-
 
-    # ✅ 5. 拉取 ImmortalWrt 23.05
+    # ✅ 5. 拉取 ImmortalWrt 23.05 到 /mnt（100GB）
     - name: Clone ImmortalWrt 23.05
       run: |
-        git clone https://github.com/immortalwrt/immortalwrt.git -b openwrt-23.05
-        cd immortalwrt
+        git clone https://github.com/immortalwrt/immortalwrt.git -b openwrt-23.05 /mnt/immortalwrt
+        cd /mnt/immortalwrt
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
     # ✅ 6. 覆盖三件套（DTS + mk + config）
     - name: Copy SL3000 DTS / mk / config
       run: |
-        cp -f sl3000/mt7981b-sl3000-emmc.dts immortalwrt/target/linux/mediatek/dts/
-        cp -f sl3000/filogic.mk immortalwrt/target/linux/mediatek/image/
-        cp -f sl3000/config-23.05 immortalwrt/.config
+        cp -f sl3000/mt7981b-sl3000-emmc.dts /mnt/immortalwrt/target/linux/mediatek/dts/
+        cp -f sl3000/filogic.mk /mnt/immortalwrt/target/linux/mediatek/image/
+        cp -f sl3000/config-23.05 /mnt/immortalwrt/.config
 
     # ✅ 7. 自检脚本（方案 B + mk 检查 + config 检查）
     - name: Add SL3000 Self-Check Script
       run: |
-        mkdir -p immortalwrt/scripts
-        cp -f sl3000/check-sl3000-23.05.sh immortalwrt/scripts/
-        chmod +x immortalwrt/scripts/check-sl3000-23.05.sh
+        mkdir -p /mnt/immortalwrt/scripts
+        cp -f sl3000/check-sl3000-23.05.sh /mnt/immortalwrt/scripts/
+        chmod +x /mnt/immortalwrt/scripts/check-sl3000-23.05.sh
 
     - name: Run SL3000 Self-Check
       run: |
-        cd immortalwrt
+        cd /mnt/immortalwrt
         ./scripts/check-sl3000-23.05.sh
 
     # ✅ 8. 构建固件（自动 fallback）
     - name: Build Firmware
       run: |
-        cd immortalwrt
+        cd /mnt/immortalwrt
         make defconfig
         make -j$(nproc) || make -j1 V=s
 
@@ -100,8 +98,8 @@ jobs:
     - name: Prepare Release Files
       run: |
         mkdir -p output
-        cp immortalwrt/bin/targets/mediatek/filogic/*sl3000* output/ || true
-        cp immortalwrt/bin/targets/mediatek/filogic/sha256sums output/ || true
+        cp /mnt/immortalwrt/bin/targets/mediatek/filogic/*sl3000* output/ || true
+        cp /mnt/immortalwrt/bin/targets/mediatek/filogic/sha256sums output/ || true
 
     # ✅ 10. 自动发布 Release
     - name: Upload Release
