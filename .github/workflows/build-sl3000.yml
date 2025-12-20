@@ -1,0 +1,93 @@
+name: Build SL3000 Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "请输入验证码（必须输入 3000 才能继续构建）"
+        required: true
+        default: "3000"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: 验证验证码
+      run: |
+        if [ "${{ github.event.inputs.code }}" != "3000" ]; then
+          echo "❌ 验证码错误，构建终止"
+          exit 1
+        fi
+        echo "✅ 验证码正确，开始构建"
+
+    - name: 释放磁盘空间（防爆盘）
+      run: |
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache
+        docker system prune -af || true
+        sudo apt-get clean
+        df -h
+
+    - name: 恢复 ccache 缓存
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ccache-${{ github.ref }}-${{ github.sha }}
+        restore-keys: |
+          ccache-${{ github.ref }}-
+          ccache-
+
+    - name: Checkout your repo（三件套）
+      uses: actions/checkout@v4
+      with:
+        path: yourrepo
+        ref: main   # ✅ 你新仓库的分支（如果是其他分支请改这里）
+
+    - name: Checkout OpenWrt 官方源码
+      uses: actions/checkout@v4
+      with:
+        repository: openwrt/openwrt
+        ref: openwrt-23.05
+        path: openwrt
+
+    - name: 更新 feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: 覆盖三件套（完全对齐路径）
+      run: |
+        # ✅ 覆盖 mt7981.mk
+        cp yourrepo/target/linux/mediatek/image/mt7981.mk \
+           openwrt/target/linux/mediatek/image/
+
+        # ✅ 覆盖 DTS
+        mkdir -p openwrt/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/
+        cp yourrepo/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/*.dts \
+           openwrt/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/
+
+        # ✅ 覆盖 .config
+        cp yourrepo/configs/sl3000.config openwrt/.config
+
+    - name: 强制只启用 SL3000（防止构建成其他设备）
+      run: |
+        cd openwrt
+        rm -f .config
+        echo "CONFIG_TARGET_mediatek=y" >> .config
+        echo "CONFIG_TARGET_mediatek_filogic=y" >> .config
+        echo "CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000-emmc=y" >> .config
+        echo "CONFIG_DEVEL=y" >> .config
+        echo "CONFIG_CCACHE=y" >> .config
+        make defconfig
+
+    - name: 构建固件
+      run: |
+        cd openwrt
+        make -j$(nproc) V=s 2>&1 | tee build.log || make -j1 V=s 2>&1 | tee build.log
+
+    - name: 生成构建信息 build-info.txt
+      run: |
+        cd openwrt
+        mkdir -p bin/targets/buildinfo
+        echo "Device: SL3000 eMMC" > bin/targets/buildinfo/build-info.txt
