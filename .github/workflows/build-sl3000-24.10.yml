@@ -37,7 +37,13 @@ jobs:
           # config（.config）
           cp .config immortalwrt/.config
 
-      # 4. 磁盘优化
+      # 4. 运行增强版自检脚本
+      - name: Run SL3000 24.10 enhanced check
+        run: |
+          chmod +x scripts/check-sl3000-24.10.sh
+          ./scripts/check-sl3000-24.10.sh
+
+      # 5. 磁盘优化
       - name: Expand disk space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -47,7 +53,7 @@ jobs:
           sudo apt-get clean
           df -h
 
-      # 5. dl 缓存
+      # 6. dl 缓存
       - name: Cache dl
         uses: actions/cache@v4
         with:
@@ -56,7 +62,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-dl-24-10-
 
-      # 6. ccache 缓存
+      # 7. ccache 缓存
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -65,19 +71,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ccache-24-10-
 
-      # 7. 构建固件
+      # 8. 构建固件
       - name: Build ImmortalWrt 24.10
         run: |
           cd immortalwrt
           make defconfig
           make -j$(nproc)
 
-      # 8. 输出固件目录
+      # 9. 输出固件目录
       - name: List firmware
         run: |
           ls -R immortalwrt/bin/targets/mediatek/filogic || true
 
-      # 9. 上传构建产物
+      # 10. 上传构建产物
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
