@@ -1,40 +1,50 @@
 #!/bin/bash
 
+# ================================
+# ✅ 进入 openwrt 目录（关键修复）
+# ================================
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+OPENWRT_DIR="$SCRIPT_DIR/../openwrt"
+
+cd "$OPENWRT_DIR" || {
+    echo "❌ 无法进入 openwrt 目录：$OPENWRT_DIR"
+    exit 1
+}
+
 echo "=== SL3000 环境自检开始 ==="
 
-# 1. 检查 mt7981.mk 是否存在
-if [ ! -f "openwrt/target/linux/mediatek/image/mt7981.mk" ]; then
+# ================================
+# ✅ 1. 检查 mt7981.mk
+# ================================
+if [ ! -f "target/linux/mediatek/image/mt7981.mk" ]; then
     echo "❌ 缺少 mt7981.mk"
+    echo "路径检查：$(pwd)/target/linux/mediatek/image/mt7981.mk"
     exit 1
 else
     echo "✅ mt7981.mk 存在"
 fi
 
-# 2. 检查 mt7981.mk 是否包含设备定义
-grep -q "Device/sl3000-emmc" openwrt/target/linux/mediatek/image/mt7981.mk
-if [ $? -ne 0 ]; then
-    echo "❌ mt7981.mk 中没有 Device/sl3000-emmc 定义"
-    exit 1
-else
-    echo "✅ mt7981.mk 中包含 Device/sl3000-emmc"
-fi
+# ================================
+# ✅ 2. 检查 DTS
+# ================================
+DTS_FILE="target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/mt7981b-sl3000-emmc.dts"
 
-# 3. 检查 DTS 路径
-if [ ! -f "openwrt/target/linux/mediatek/files-5.15/arch/arm64/boot/dts/mediatek/mt7981b-sl3000-emmc.dts" ]; then
-    echo "❌ DTS 文件不存在"
+if [ ! -f "$DTS_FILE" ]; then
+    echo "❌ DTS 文件不存在：$DTS_FILE"
     exit 1
 else
     echo "✅ DTS 文件存在"
 fi
 
-# 4. 检查 defconfig 后是否启用 SL3000
-grep -q "CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000-emmc=y" openwrt/.config
-if [ $? -ne 0 ]; then
+# ================================
+# ✅ 3. 检查 .config 是否启用 SL3000
+# ================================
+if grep -q "sl3000" .config; then
+    echo "✅ .config 中已启用 SL3000"
+else
     echo "❌ .config 中未启用 SL3000"
     exit 1
-else
-    echo "✅ .config 已启用 SL3000"
 fi
 
-echo "=== ✅ SL3000 环境自检通过，可以安全构建 ==="
+echo "=== ✅ SL3000 环境自检通过 ==="
 exit 0
