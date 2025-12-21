@@ -39,6 +39,10 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
+    - name: Remove broken MT7986 patches (方案二)
+      run: |
+        rm -f /mnt/immortalwrt/target/linux/mediatek/patches-6.6/86*.patch
+
     - name: Copy SL3000 triple set
       run: |
         cd $GITHUB_WORKSPACE
