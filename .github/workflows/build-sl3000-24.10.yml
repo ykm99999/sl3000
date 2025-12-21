@@ -1,4 +1,4 @@
-name: Build SL3000 eMMC (24.10 Stable)
+name: Build SL3000 eMMC (24.10 Final)
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ jobs:
     - name: Checkout Repo
       uses: actions/checkout@v4
 
-    # ✅ 1. 清理磁盘（最大化可用空间）
+    # ✅ 1. 清理磁盘
     - name: Optimize Disk Space
       run: |
         docker system prune -af || true
@@ -24,7 +24,7 @@ jobs:
         sudo mkdir -p /mnt/immortalwrt
         sudo chown $USER:$USER /mnt/immortalwrt
 
-    # ✅ 2. 安装构建依赖（含 dtc）
+    # ✅ 2. 安装依赖（含 dtc）
     - name: Install Dependencies
       run: |
         sudo apt update
@@ -63,14 +63,14 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    # ✅ 6. 覆盖三件套（DTS / mk / config）
+    # ✅ 6. 覆盖三件套（严格使用你指定的路径）
     - name: Copy SL3000 DTS / mk / config
       run: |
         cp -f sl3000/mt7981b-sl3000-emmc.dts /mnt/immortalwrt/target/linux/mediatek/dts/
         cp -f sl3000/filogic.mk /mnt/immortalwrt/target/linux/mediatek/image/
         cp -f sl3000/config-24.10.config /mnt/immortalwrt/.config
 
-    # ✅ 7. 自检脚本（含 DTS 语法检查）
+    # ✅ 7. 自检脚本
     - name: Add SL3000 Self-Check Script
       run: |
         mkdir -p /mnt/immortalwrt/scripts
