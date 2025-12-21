@@ -1,48 +1,59 @@
-#!/bin/bash
+#!/bin/sh
 
-echo "=== SL3000 构建环境自检（openwrt/）开始 ==="
+echo "=== SL3000 Pre-check ==="
 
-ROOT="openwrt"
+ROOT="$1"
 
-# 1. 检查 filogic.mk
-if [ ! -f "$ROOT/target/linux/mediatek/image/filogic.mk" ]; then
-    echo "❌ 缺少 $ROOT/target/linux/mediatek/image/filogic.mk"
+if [ -z "$ROOT" ]; then
+    echo "用法: $0 <immortalwrt 根目录>"
     exit 1
-else
-    echo "✅ filogic.mk 存在"
 fi
 
-grep -q "Device/sl3000_emmc" "$ROOT/target/linux/mediatek/image/filogic.mk"
-if [ $? -ne 0 ]; then
-    echo "❌ filogic.mk 中没有 Device/sl3000_emmc 定义"
-    exit 1
-else
-    echo "✅ filogic.mk 中包含 Device/sl3000_emmc"
-fi
+DTS_FILE="$ROOT/target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts"
+MK_FILE="$ROOT/target/linux/mediatek/image/filogic.mk"
+CONFIG_FILE="$GITHUB_WORKSPACE/configs/sl3000.config"
 
-# 2. 检查 DTS
-if [ ! -f "$ROOT/target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts" ]; then
-    echo "❌ 缺少 DTS：$ROOT/target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts"
+# 1. 检查 DTS
+if [ ! -f "$DTS_FILE" ]; then
+    echo "❌ DTS 文件缺失: $DTS_FILE"
     exit 1
 else
     echo "✅ DTS 文件存在"
 fi
 
-# 3. 检查 .config
-if [ ! -f "$ROOT/.config" ]; then
-    echo "❌ 缺少 $ROOT/.config（构建无法继续）"
+# 2. 检查 filogic.mk
+if [ ! -f "$MK_FILE" ]; then
+    echo "❌ filogic.mk 缺失: $MK_FILE"
     exit 1
 else
-    echo "✅ .config 存在"
+    echo "✅ filogic.mk 存在"
 fi
 
-grep -q "CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000_emmc=y" "$ROOT/.config"
-if [ $? -ne 0 ]; then
-    echo "❌ .config 未启用 SL3000"
+# 3. 检查 config 是否启用设备
+if ! grep -q "CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000_emmc=y" "$CONFIG_FILE"; then
+    echo "❌ sl3000.config 未启用 SL3000 设备"
     exit 1
 else
-    echo "✅ .config 已启用 SL3000"
+    echo "✅ sl3000.config 已启用 SL3000 设备"
 fi
 
-echo "=== ✅ SL3000 构建环境自检通过（openwrt/）==="
+# 4. 检查 DTS Makefile 是否包含 dtb
+DTS_MK="$ROOT/target/linux/mediatek/files-6.6/arch/arm64/boot/dts/mediatek/Makefile"
+if ! grep -q "mt7981b-sl3000-emmc.dtb" "$DTS_MK"; then
+    echo "❌ DTS Makefile 未注册 dtb"
+    exit 1
+else
+    echo "✅ DTS Makefile 已注册 dtb"
+fi
+
+# 5. 检查 image Makefile 是否包含设备
+IMAGE_MK="$ROOT/target/linux/mediatek/image/Makefile"
+if ! grep -q "sl3000_emmc" "$IMAGE_MK"; then
+    echo "❌ image Makefile 未注册设备"
+    exit 1
+else
+    echo "✅ image Makefile 已注册设备"
+fi
+
+echo "✅ 所有 SL3000 检查通过"
 exit 0
