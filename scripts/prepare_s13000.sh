@@ -3,7 +3,7 @@ set -e
 
 ROOT="/home/runner/immortalwrt"
 
-echo "===== S13000 构建准备 + 检查（合并版）====="
+echo "===== S13000 构建准备 + 检查（最终版）====="
 
 # ============================
 # 1. 复制 DTS
@@ -49,16 +49,19 @@ grep -q "DEVICE_DTS *:= *mt7981b-s13000-emmc" "$DST_MK" \
 echo "✅ filogic.mk 对齐正确"
 
 # ============================
-# 6. 检查 DTS Makefile 注册（容错）
+# 6. 自动注册 DTS 到 mediatek/Makefile
 # ============================
-DTS_MAKEFILE="$ROOT/target/linux/mediatek/dts/Makefile"
+MAKEFILE="$ROOT/target/linux/mediatek/Makefile"
 
-if [ -f "$DTS_MAKEFILE" ]; then
-    grep -q "mt7981b-s13000-emmc.dts" "$DTS_MAKEFILE" \
-      || { echo "❌ DTS Makefile 未注册 mt7981b-s13000-emmc.dts"; exit 1; }
-    echo "✅ DTS Makefile 已注册"
+if [ -f "$MAKEFILE" ]; then
+    if ! grep -q "mt7981b-s13000-emmc.dtb" "$MAKEFILE"; then
+        echo "dtb-y += mt7981b-s13000-emmc.dtb" >> "$MAKEFILE"
+        echo "✅ 已自动注册 DTS 到 mediatek/Makefile"
+    else
+        echo "✅ DTS 已在 mediatek/Makefile 注册"
+    fi
 else
-    echo "⚠️ DTS Makefile 不存在，跳过注册检查"
+    echo "⚠️ mediatek/Makefile 不存在，跳过注册检查"
 fi
 
 # ============================
