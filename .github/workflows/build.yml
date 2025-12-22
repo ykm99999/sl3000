@@ -56,16 +56,16 @@ jobs:
         key: staging-${{ runner.os }}-${{ github.sha }}
         restore-keys: staging-${{ runner.os }}-
 
-    # 准备三件套
+    # 三件套准备
     - name: Prepare S13000 triple-set
       run: |
         chmod +x scripts/prepare_s13000.sh
-        scripts/prepare_s13000.sh
+        ./scripts/prepare_s13000.sh
 
     - name: Check S13000 DTS/mk/config
       run: |
         chmod +x scripts/check_s13000.sh
-        scripts/check_s13000.sh
+        ./scripts/check_s13000.sh
 
     # 构建固件
     - name: Build firmware
