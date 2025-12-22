@@ -4,12 +4,23 @@ set -e
 ROOT="/home/runner/immortalwrt"
 CONFIG="$ROOT/.config"
 
-echo "===== S13000 构建准备 + 依赖预检查（最终合并版）====="
+echo "===== S13000 构建准备（最终修复版）====="
 
 # ============================
-# 0. RootFS 依赖预检查（自动修复）
+# 1. 先复制 .config（必须最先做）
 # ============================
+echo "---- 复制 .config ----"
 
+SRC_CONFIG="configs/s13000.config"
+
+[ -f "$SRC_CONFIG" ] || { echo "❌ 源 config 不存在：$SRC_CONFIG"; exit 1; }
+cp -f "$SRC_CONFIG" "$CONFIG"
+echo "✅ .config 已复制 → $CONFIG"
+
+
+# ============================
+# 2. RootFS 依赖预检查（现在 .config 已存在）
+# ============================
 echo "---- RootFS 依赖预检查 ----"
 
 # luci 主包检查
@@ -21,7 +32,7 @@ fi
 # default-settings 依赖 luci
 if grep -q "^CONFIG_PACKAGE_default-settings=y" "$CONFIG"; then
     if ! grep -q "^CONFIG_PACKAGE_luci=y" "$CONFIG"; then
-        echo "❌ default-settings 依赖 luci，但未启用 luci → 自动禁用 default-settings"
+        echo "❌ default-settings 依赖 luci → 自动禁用 default-settings"
         sed -i "/CONFIG_PACKAGE_default-settings/d" "$CONFIG"
     fi
 fi
@@ -34,23 +45,25 @@ if grep -q "CONFIG_PACKAGE_luci-app-store=y" "$CONFIG"; then
     fi
 fi
 
-# 清理损坏的 staging_dir（避免 ABI 冲突）
+# 清理损坏的 staging_dir
 if [ -d "$ROOT/staging_dir" ]; then
     echo "⚠️ 清理 staging_dir（避免 ABI 冲突）"
     rm -rf "$ROOT/staging_dir"
 fi
 
 # 清理损坏的 dl 包
-echo "⚠️ 清理损坏的 dl 包"
-find "$ROOT/dl" -size 0 -delete || true
+if [ -d "$ROOT/dl" ]; then
+    echo "⚠️ 清理损坏的 dl 包"
+    find "$ROOT/dl" -size 0 -delete || true
+fi
 
 echo "---- RootFS 依赖预检查完成 ----"
 
 
 # ============================
-# 1. 复制 DTS
+# 3. 复制 DTS/MK
 # ============================
-echo "---- DTS/MK/config 三件套 ----"
+echo "---- DTS/MK 三件套 ----"
 
 SRC_DTS="dts/mt7981b-s13000-emmc.dts"
 DST_DTS="$ROOT/target/linux/mediatek/dts/mt7981b-s13000-emmc.dts"
@@ -59,9 +72,6 @@ DST_DTS="$ROOT/target/linux/mediatek/dts/mt7981b-s13000-emmc.dts"
 cp -f "$SRC_DTS" "$DST_DTS"
 echo "✅ DTS 已复制 → $DST_DTS"
 
-# ============================
-# 2. 复制 MK
-# ============================
 SRC_MK="image/filogic.mk"
 DST_MK="$ROOT/target/linux/mediatek/image/filogic.mk"
 
@@ -69,30 +79,20 @@ DST_MK="$ROOT/target/linux/mediatek/image/filogic.mk"
 cp -f "$SRC_MK" "$DST_MK"
 echo "✅ filogic.mk 已复制"
 
-# ============================
-# 3. 复制 CONFIG
-# ============================
-SRC_CONFIG="configs/s13000.config"
-
-[ -f "$SRC_CONFIG" ] || { echo "❌ 源 config 不存在：$SRC_CONFIG"; exit 1; }
-cp -f "$SRC_CONFIG" "$CONFIG"
-echo "✅ .config 已复制"
 
 # ============================
-# 4. 检查 DTS 是否存在
+# 4. DTS/MK 检查
 # ============================
-[ -f "$DST_DTS" ] || { echo "❌ DTS 未成功复制：$DST_DTS"; exit 1; }
+[ -f "$DST_DTS" ] || { echo "❌ DTS 未成功复制"; exit 1; }
 echo "✅ DTS 存在"
 
-# ============================
-# 5. 检查 filogic.mk DEVICE_DTS
-# ============================
 grep -q "DEVICE_DTS *:= *mt7981b-s13000-emmc" "$DST_MK" \
   || { echo "❌ filogic.mk 未对齐 DEVICE_DTS"; exit 1; }
 echo "✅ filogic.mk 对齐正确"
 
+
 # ============================
-# 6. 自动注册 DTS 到 mediatek/Makefile
+# 5. 自动注册 DTS
 # ============================
 MAKEFILE="$ROOT/target/linux/mediatek/Makefile"
 
@@ -103,12 +103,11 @@ if [ -f "$MAKEFILE" ]; then
     else
         echo "✅ DTS 已在 mediatek/Makefile 注册"
     fi
-else
-    echo "⚠️ mediatek/Makefile 不存在，跳过注册检查"
 fi
 
+
 # ============================
-# 7. 清理 .config 中无效包
+# 6. 清理无效包
 # ============================
 BAD_PKGS=(asterisk onionshare pysocks unidecode uw-imap)
 
@@ -117,15 +116,17 @@ for pkg in "${BAD_PKGS[@]}"; do
 done
 echo "✅ .config 无效包已清理"
 
+
 # ============================
-# 8. 检查设备符号
+# 7. 检查设备符号
 # ============================
 grep -q "CONFIG_TARGET_mediatek_filogic_DEVICE_s13000_emmc=y" "$CONFIG" \
   || { echo "❌ .config 未启用 S13000 设备"; exit 1; }
 echo "✅ .config 已启用 S13000 设备"
 
+
 # ============================
-# 9. 清理构建缓存（安全）
+# 8. 清理构建缓存
 # ============================
 rm -rf $ROOT/tmp/* || true
 rm -rf $ROOT/build_dir/* || true
