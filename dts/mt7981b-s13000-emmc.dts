@@ -1,41 +1,135 @@
 /dts-v1/;
 
+#include "mt7981b.dtsi"
+
 / {
-    compatible = "mediatek,mt7981b-s13000-emmc", "mediatek,mt7981b";
-    model = "S13000 eMMC Router";
+    model = "SL-3000 (EMMC)";
+    compatible = "sl,3000-emmc", "mediatek,mt7981b";
 
     chosen {
         bootargs = "console=ttyS0,115200n8";
     };
-};
 
-#include "mt7981b.dtsi"
+    /* ===== LED（真实 GPIO）===== */
+    leds {
+        compatible = "gpio-leds";
 
-/ {
-    memory@40000000 {
-        device_type = "memory";
-        reg = <0x40000000 0x20000000>;
+        red_power {
+            label = "sl3000:red:power";
+            gpios = <&pio 10 GPIO_ACTIVE_LOW>;
+            default-state = "on";
+        };
+
+        green_status {
+            label = "sl3000:green:status";
+            gpios = <&pio 11 GPIO_ACTIVE_LOW>;
+            default-state = "off";
+        };
+
+        blue_wifi {
+            label = "sl3000:blue:wifi";
+            gpios = <&pio 12 GPIO_ACTIVE_LOW>;
+            default-state = "off";
+        };
     };
 
-    aliases {
-        serial0 = &uart0;
+    /* ===== 按键（真实 GPIO）===== */
+    gpio-keys {
+        compatible = "gpio-keys";
+
+        reset {
+            label = "reset";
+            linux,code = <KEY_RESTART>;
+            gpios = <&pio 1 GPIO_ACTIVE_LOW>;
+        };
+
+        mesh {
+            label = "mesh";
+            linux,code = <KEY_MESH>;
+            gpios = <&pio 0 GPIO_ACTIVE_LOW>;
+        };
     };
 };
 
+/* ===== UART ===== */
 &uart0 {
     status = "okay";
 };
 
-&eth {
-    status = "okay";
-};
-
-&wifi {
-    status = "okay";
-};
-
+/* ===== EMMC（真实配置）===== */
 &mmc0 {
     status = "okay";
     bus-width = <8>;
-    max-frequency = <50000000>;
+    non-removable;
+    no-sd;
+    no-sdio;
+    max-frequency = <52000000>;
+};
+
+/* ===== 以太网 + 交换机（真实端口映射）===== */
+&eth {
+    status = "okay";
+
+    gmac0: mac@0 {
+        status = "okay";
+        phy-mode = "2500base-x";
+
+        fixed-link {
+            speed = <2500>;
+            full-duplex;
+        };
+    };
+
+    mdio: mdio-bus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        switch@0 {
+            compatible = "mediatek,mt7531";
+            reg = <0x1f>;
+            reset-gpios = <&pio 39 GPIO_ACTIVE_HIGH>;
+
+            ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                port@0 {
+                    reg = <0>;
+                    label = "lan1";
+                };
+
+                port@1 {
+                    reg = <1>;
+                    label = "lan2";
+                };
+
+                port@2 {
+                    reg = <2>;
+                    label = "lan3";
+                };
+
+                port@3 {
+                    reg = <3>;
+                    label = "wan";
+                };
+
+                port@6 {
+                    reg = <6>;
+                    label = "cpu";
+                    ethernet = <&gmac0>;
+                    phy-mode = "2500base-x";
+
+                    fixed-link {
+                        speed = <2500>;
+                        full-duplex;
+                    };
+                };
+            };
+        };
+    };
+};
+
+/* ===== WiFi（真实芯片）===== */
+&wifi {
+    status = "okay";
 };
