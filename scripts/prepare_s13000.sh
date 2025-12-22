@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-ROOT="/mnt/immortalwrt"
+ROOT="/home/runner/immortalwrt"
 REPO="$GITHUB_WORKSPACE"
 
 echo "=== Prepare S13000 triple-set ==="
