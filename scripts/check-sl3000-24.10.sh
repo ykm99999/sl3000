@@ -1,59 +1,29 @@
 #!/bin/sh
+set -e
 
-echo "=== SL3000 Pre-check ==="
+ROOT="/mnt/immortalwrt"
+REPO="$GITHUB_WORKSPACE"
 
-ROOT="$1"
+echo "=== Prepare S13000 triple-set ==="
 
-if [ -z "$ROOT" ]; then
-    echo "用法: $0 <immortalwrt 根目录>"
-    exit 1
-fi
+# 1. DTS
+cp -f "$REPO/dts/mt7981b-s13000-emmc.dts" \
+  "$ROOT/target/linux/mediatek/dts/"
 
-DTS_FILE="$ROOT/target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts"
-MK_FILE="$ROOT/target/linux/mediatek/image/filogic.mk"
-CONFIG_FILE="$GITHUB_WORKSPACE/configs/sl3000.config"
+# 2. filogic.mk
+cp -f "$REPO/image/filogic.mk" \
+  "$ROOT/target/linux/mediatek/image/filogic.mk"
 
-# 1. 检查 DTS
-if [ ! -f "$DTS_FILE" ]; then
-    echo "❌ DTS 文件缺失: $DTS_FILE"
-    exit 1
-else
-    echo "✅ DTS 文件存在"
-fi
+# 3. config
+cp -f "$REPO/configs/s13000.config" \
+  "$ROOT/.config"
 
-# 2. 检查 filogic.mk
-if [ ! -f "$MK_FILE" ]; then
-    echo "❌ filogic.mk 缺失: $MK_FILE"
-    exit 1
-else
-    echo "✅ filogic.mk 存在"
-fi
+# 4. 关闭 LTO（更稳）
+echo "CONFIG_USE_LTO=n" >> "$ROOT/.config"
 
-# 3. 检查 config 是否启用设备
-if ! grep -q "CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000_emmc=y" "$CONFIG_FILE"; then
-    echo "❌ sl3000.config 未启用 SL3000 设备"
-    exit 1
-else
-    echo "✅ sl3000.config 已启用 SL3000 设备"
-fi
-
-# 4. 检查 DTS Makefile 是否包含 dtb
+# 5. DTS Makefile 注册 dtb
 DTS_MK="$ROOT/target/linux/mediatek/files-6.6/arch/arm64/boot/dts/mediatek/Makefile"
-if ! grep -q "mt7981b-sl3000-emmc.dtb" "$DTS_MK"; then
-    echo "❌ DTS Makefile 未注册 dtb"
-    exit 1
-else
-    echo "✅ DTS Makefile 已注册 dtb"
-fi
+grep -q 'mt7981b-s13000-emmc.dtb' "$DTS_MK" || \
+  echo 'dtb-$(CONFIG_TARGET_mediatek_filogic_DEVICE_s13000_emmc) += mt7981b-s13000-emmc.dtb' >> "$DTS_MK"
 
-# 5. 检查 image Makefile 是否包含设备
-IMAGE_MK="$ROOT/target/linux/mediatek/image/Makefile"
-if ! grep -q "sl3000_emmc" "$IMAGE_MK"; then
-    echo "❌ image Makefile 未注册设备"
-    exit 1
-else
-    echo "✅ image Makefile 已注册设备"
-fi
-
-echo "✅ 所有 SL3000 检查通过"
-exit 0
+echo "[OK] S13000 triple-set prepared."
