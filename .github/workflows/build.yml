@@ -11,32 +11,18 @@ jobs:
     - name: Checkout repo
       uses: actions/checkout@v4
 
-    - name: Extreme disk clean (keep ImmortalWrt and caches)
+    - name: Extreme disk clean
       run: |
-        # 系统级大块清理（不动 /home/runner/immortalwrt）
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /usr/local/share/boost
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /usr/local/share/powershell
-        sudo rm -rf /usr/local/share/chromium
-        sudo rm -rf /usr/local/share/miniconda
-        sudo rm -rf /usr/local/share/swift
-        sudo rm -rf /usr/local/share/edge
-        sudo rm -rf /usr/local/share/az_*
-        sudo rm -rf /usr/local/share/gradle*
-        sudo rm -rf /usr/local/share/maven*
-        # 用户级缓存清理
-        sudo rm -rf ~/.npm || true
-        sudo rm -rf ~/.cargo || true
-        sudo rm -rf ~/.cache/pip || true
-        # Docker 与 apt 缓存
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /usr/local/share/boost \
+          /opt/ghc /usr/local/share/powershell /usr/local/share/chromium \
+          /usr/local/share/miniconda /usr/local/share/swift /usr/local/share/edge \
+          /usr/local/share/az_* /usr/local/share/gradle* /usr/local/share/maven*
+        sudo rm -rf ~/.npm ~/.cargo ~/.cache/pip || true
         sudo docker image prune -a -f || true
         sudo apt clean
-        echo "[INFO] Disk usage after clean:"
         df -h
 
-    - name: Install build dependencies
+    - name: Install dependencies
       run: |
         sudo apt update
         sudo apt install -y build-essential clang flex bison g++ gawk gcc-multilib \
@@ -48,42 +34,29 @@ jobs:
         git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git \
           -b openwrt-24.10 /home/runner/immortalwrt
 
-    # ============================
-    #        缓存恢复
-    # ============================
-
+    # 缓存恢复
     - name: Restore ccache
       uses: actions/cache@v4
       with:
         path: ~/.ccache
-        key: ccache-${{ runner.os }}-${{ hashFiles('configs/**/*.config', 'scripts/**/*.sh') }}
-        restore-keys: |
-          ccache-${{ runner.os }}-
+        key: ccache-${{ runner.os }}-${{ github.sha }}
+        restore-keys: ccache-${{ runner.os }}-
 
     - name: Restore dl cache
       uses: actions/cache@v4
       with:
         path: /home/runner/immortalwrt/dl
-        key: dl-${{ runner.os }}-${{ hashFiles('configs/**/*.config', 'scripts/**/*.sh') }}
-        restore-keys: |
-          dl-${{ runner.os }}-
+        key: dl-${{ runner.os }}-${{ github.sha }}
+        restore-keys: dl-${{ runner.os }}-
 
     - name: Restore staging_dir cache
       uses: actions/cache@v4
       with:
         path: /home/runner/immortalwrt/staging_dir
-        key: staging-${{ runner.os }}-${{ hashFiles('configs/**/*.config', 'scripts/**/*.sh') }}
-        restore-keys: |
-          staging-${{ runner.os }}-
+        key: staging-${{ runner.os }}-${{ github.sha }}
+        restore-keys: staging-${{ runner.os }}-
 
-    # ============================
-    #        准备 & 检查
-    # ============================
-
-    - name: Remove broken MT7986 patch
-      run: |
-        rm -f /home/runner/immortalwrt/target/linux/mediatek/patches-6.6/999-fix-mt7986.patch || true
-
+    # 准备三件套
     - name: Prepare S13000 triple-set
       run: |
         chmod +x scripts/prepare_s13000.sh
@@ -94,65 +67,44 @@ jobs:
         chmod +x scripts/check_s13000.sh
         scripts/check_s13000.sh
 
-    # ============================
-    #        构建固件
-    # ============================
-
+    # 构建固件
     - name: Build firmware
       run: |
         cd /home/runner/immortalwrt
-        echo "[INFO] Disk usage before build:"
-        df -h
-
         export CCACHE_DIR=~/.ccache
         export CC="ccache gcc"
         export CXX="ccache g++"
-
         make defconfig
-        echo "[INFO] Build running..."
         make -j$(nproc) || make -j1 V=s
-
-        echo "[INFO] Disk usage after build:"
         df -h
         ccache -s || true
 
-    # ============================
-    #        保存缓存
-    # ============================
-
+    # 保存缓存
     - name: Save ccache
       uses: actions/cache@v4
       with:
         path: ~/.ccache
-        key: ccache-${{ runner.os }}-${{ hashFiles('configs/**/*.config', 'scripts/**/*.sh') }}
+        key: ccache-${{ runner.os }}-${{ github.sha }}
 
     - name: Save dl cache
       uses: actions/cache@v4
       with:
         path: /home/runner/immortalwrt/dl
-        key: dl-${{ runner.os }}-${{ hashFiles('configs/**/*.config', 'scripts/**/*.sh') }}
+        key: dl-${{ runner.os }}-${{ github.sha }}
 
     - name: Save staging_dir cache
       uses: actions/cache@v4
       with:
         path: /home/runner/immortalwrt/staging_dir
-        key: staging-${{ runner.os }}-${{ hashFiles('configs/**/*.config', 'scripts/**/*.sh') }}
+        key: staging-${{ runner.os }}-${{ github.sha }}
 
-    # ============================
-    #        收集固件
-    # ============================
-
+    # 收集固件
     - name: Collect firmware
       run: |
         mkdir -p output
-        cp -rf /home/runner/immortalwrt/bin/targets/*/*/* output/ || true
-        echo "[INFO] Collected firmware files:"
-        ls -lh output || true
+        cp -rf /home/runner/immortalwrt/bin/targets/*/*/* output/
 
-    # ============================
-    #        自动发布 Release
-    # ============================
-
+    # 自动发布
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
@@ -160,11 +112,9 @@ jobs:
         name: "S13000 Firmware Build #${{ github.run_number }}"
         body: |
           自动构建固件（S13000 / ImmortalWrt 24.10）
-          - 设备：s13000_emmc
           - DTS：mt7981b-s13000-emmc.dts
           - 构建编号：${{ github.run_number }}
           - 缓存：ccache + dl + staging_dir
-          - 磁盘：极限清理（不动 ImmortalWrt 仓库及缓存目录）
         files: output/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
