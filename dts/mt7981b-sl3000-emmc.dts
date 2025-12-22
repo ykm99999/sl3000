@@ -4,8 +4,8 @@
 #include "mt7981.dtsi"
 
 / {
-    compatible = "sl,sl3000-emmc", "mediatek,mt7981";
-    model = "SL3000 eMMC";
+    compatible = "s, s13000-emmc", "mediatek,mt7981";
+    model = "S13000 eMMC";
 
     aliases {
         serial0 = &uart0;
@@ -21,14 +21,14 @@
 
     memory {
         device_type = "memory";
-        reg = <0x40000000 0x10000000>; /* 256MB，根据实际可改 */
+        reg = <0x40000000 0x10000000>; /* 256MB，如有需要你再改 */
     };
 
     leds {
         compatible = "gpio-leds";
 
         led_status: status {
-            label = "sl3000:green:status";
+            label = "s13000:green:status";
             gpios = <&gpio 0 GPIO_ACTIVE_HIGH>;
         };
     };
@@ -98,7 +98,7 @@
     };
 };
 
-/* GPIO regulator 示例，根据实际硬件可删改 */
+/* 简单的固定电源，按需再细化 */
 &pio {
     reg_3p3v: regulator-3p3v {
         compatible = "regulator-fixed";
