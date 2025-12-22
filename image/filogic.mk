@@ -1,17 +1,15 @@
-define Device/sl3000_emmc
-  DEVICE_VENDOR := SL
-  DEVICE_MODEL := SL3000
+define Device/s13000_emmc
+  DEVICE_VENDOR := S
+  DEVICE_MODEL := S13000
   DEVICE_VARIANT := eMMC
-  DEVICE_DTS := mt7981b-sl3000-emmc
+  DEVICE_DTS := mt7981b-s13000-emmc
   DEVICE_DTS_DIR := $(DTS_DIR)/mediatek
-  SUPPORTED_DEVICES += sl3000,emmc
+  SUPPORTED_DEVICES += s13000,emmc
 
   BLOCKSIZE := 128k
   PAGESIZE := 2k
-
   IMAGE_SIZE := 128m
 
-  # 标准 tar+metadata sysupgrade
   IMAGES := sysupgrade.bin
   IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
 
@@ -25,4 +23,4 @@ define Device/sl3000_emmc
     kmod-fs-ext4 \
     e2fsprogs
 endef
-TARGET_DEVICES += sl3000_emmc
+TARGET_DEVICES += s13000_emmc
