@@ -1,73 +1,49 @@
 #!/usr/bin/env bash
 set -e
 
-echo "===== S13000 构建前检查脚本（自动检测 + fail-fast）====="
-
 ROOT="/home/runner/immortalwrt"
 
-CONFIG_FILE="$ROOT/.config"
-DTS_FILE="$ROOT/target/linux/mediatek/dts/mt7981b-s13000-emmc.dts"
-MK_FILE="$ROOT/target/linux/mediatek/image/filogic.mk"
-DTS_MAKEFILE="$ROOT/target/linux/mediatek/dts/Makefile"
+echo "=== [S13000] Apply DTS / MK / CONFIG ==="
 
-echo "[1] 检查 DTS 文件..."
-if [ ! -f "$DTS_FILE" ]; then
-    echo "❌ DTS 缺失：$DTS_FILE"
-    exit 1
-fi
-echo "✅ DTS 存在：mt7981b-s13000-emmc.dts"
+# 1. DTS
+SRC_DTS="dts/mt7981b-s13000-emmc.dts"
+DST_DTS="$ROOT/target/linux/mediatek/dts/mt7981b-s13000-emmc.dts"
 
-echo "[2] 检查 filogic.mk 中 DEVICE_DTS..."
-if ! grep -q "DEVICE_DTS *:= *mt7981b-s13000-emmc" "$MK_FILE"; then
-    echo "❌ filogic.mk 未对齐 DEVICE_DTS := mt7981b-s13000-emmc"
-    echo "👉 按你的规则，这里不自动修改，请你手动修复 filogic.mk"
-    exit 1
-fi
-echo "✅ filogic.mk DEVICE_DTS 对齐正确"
-
-echo "[3] 检查 DTS Makefile 注册..."
-if ! grep -q "mt7981b-s13000-emmc.dts" "$DTS_MAKEFILE"; then
-    echo "❌ DTS Makefile 未注册 mt7981b-s13000-emmc.dts"
-    echo "👉 按你的规则，这里不自动 append，请你手动在 DTS_MT7981 行补上"
-    exit 1
-fi
-echo "✅ DTS 已在 DTS Makefile 注册"
-
-echo "[4] 清理 .config 中无效包..."
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "❌ 未找到 .config：$CONFIG_FILE"
+if [ ! -f "$SRC_DTS" ]; then
+    echo "❌ 源 DTS 不存在：$SRC_DTS"
     exit 1
 fi
 
-BAD_PKGS=(
-  "asterisk"
-  "onionshare"
-  "pysocks"
-  "unidecode"
-  "uw-imap"
-)
+cp -f "$SRC_DTS" "$DST_DTS"
+echo "[OK] DTS applied → $DST_DTS"
 
-echo "将从 .config 中清理以下无效包："
-printf '  - %s\n' "${BAD_PKGS[@]}"
+# 2. MK
+SRC_MK="image/filogic.mk"
+DST_MK="$ROOT/target/linux/mediatek/image/filogic.mk"
 
-for pkg in "${BAD_PKGS[@]}"; do
-    sed -i "/$pkg/d" "$CONFIG_FILE"
-done
-
-echo "验证清理结果..."
-for pkg in "${BAD_PKGS[@]}"; do
-    if grep -q "$pkg" "$CONFIG_FILE"; then
-        echo "❌ 清理失败：仍然存在 $pkg"
-        exit 1
-    fi
-done
-echo "✅ .config 已完成清理"
-
-echo "[5] 检查目标设备符号..."
-if ! grep -q "CONFIG_TARGET_mediatek_filogic_DEVICE_s13000_emmc=y" "$CONFIG_FILE"; then
-    echo "❌ .config 未启用 S13000 设备：CONFIG_TARGET_mediatek_filogic_DEVICE_s13000_emmc=y"
+if [ ! -f "$SRC_MK" ]; then
+    echo "❌ 源 filogic.mk 不存在：$SRC_MK"
     exit 1
 fi
-echo "✅ .config 已启用 S13000 设备"
 
-echo "===== 所有检查通过，S13000 构建环境已准备完毕 ====="
+cp -f "$SRC_MK" "$DST_MK"
+echo "[OK] filogic.mk updated"
+
+# 3. CONFIG
+SRC_CONFIG="configs/s13000.config"
+DST_CONFIG="$ROOT/.config"
+
+if [ ! -f "$SRC_CONFIG" ]; then
+    echo "❌ 源 config 不存在：$SRC_CONFIG"
+    exit 1
+fi
+
+cp -f "$SRC_CONFIG" "$DST_CONFIG"
+echo "[OK] .config applied"
+
+# 4. 清理构建缓存（安全，不动 dl/staging_dir）
+rm -rf $ROOT/tmp/*
+rm -rf $ROOT/build_dir/*
+
+echo "[OK] Build cache cleaned"
+echo "=== [S13000] prepare_s13000.sh 完成 ==="
