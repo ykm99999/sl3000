@@ -1,4 +1,4 @@
-name: Build SL3000 eMMC (24.10 Stable)
+name: Build S13000 eMMC (24.10)
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout triple-set repo
+    - name: Checkout repo
       uses: actions/checkout@v4
 
     - name: Clean disk
@@ -28,7 +28,7 @@ jobs:
           python3 python3-distutils rsync unzip zlib1g-dev file wget ccache \
           device-tree-compiler
 
-    - name: Clone ImmortalWrt 24.10 stable
+    - name: Clone ImmortalWrt 24.10
       run: |
         git clone https://github.com/immortalwrt/immortalwrt.git /mnt/immortalwrt
         cd /mnt/immortalwrt
@@ -38,47 +38,35 @@ jobs:
 
     - name: Remove broken MT7986 patches
       run: |
-        rm -f /mnt/immortalwrt/target/linux/mediatek/patches-6.6/86*.patch
+        rm -f /mnt/immortalwrt/target/linux/mediatek/patches-6.6/86*.patch || true
 
-    - name: Copy SL3000 DTS + MK + CONFIG
+    - name: Prepare S13000 triple-set
       run: |
-        cd $GITHUB_WORKSPACE
-        cp -f dts/mt7981b-sl3000-emmc.dts /mnt/immortalwrt/target/linux/mediatek/dts/
-        cp -f image/filogic.mk /mnt/immortalwrt/target/linux/mediatek/image/
-        cp -f configs/sl3000.config /mnt/immortalwrt/.config
+        chmod +x scripts/prepare_s13000.sh
+        ./scripts/prepare_s13000.sh
 
-    - name: Disable LTO (防止 OOM)
-      run: |
-        echo "CONFIG_USE_LTO=n" >> /mnt/immortalwrt/.config
-
-    - name: Patch DTS Makefile (注册 dtb)
-      run: |
-        DTS_MK="/mnt/immortalwrt/target/linux/mediatek/files-6.6/arch/arm64/boot/dts/mediatek/Makefile"
-        echo 'dtb-$(CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000_emmc) += mt7981b-sl3000-emmc.dtb' >> $DTS_MK
-
-    - name: Pre-check SL3000 triple set
+    - name: Pre-check S13000 triple-set
       run: |
         cd /mnt/immortalwrt
-        echo "=== SL3000 triple-set pre-check ==="
+        echo "=== S13000 triple-set pre-check ==="
 
-        test -f target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts || (echo "❌ DTS 文件缺失" && exit 1)
-        grep -q 'Device/sl3000_emmc' target/linux/mediatek/image/filogic.mk || (echo "❌ filogic.mk 未定义 Device/sl3000_emmc" && exit 1)
-        grep -q 'CONFIG_TARGET_mediatek_filogic_DEVICE_sl3000_emmc=y' "$GITHUB_WORKSPACE/configs/sl3000.config" || (echo "❌ sl3000.config 未启用设备" && exit 1)
+        test -f target/linux/mediatek/dts/mt7981b-s13000-emmc.dts || (echo "❌ DTS 文件缺失" && exit 1)
+        grep -q 'Device/s13000_emmc' target/linux/mediatek/image/filogic.mk || (echo "❌ filogic.mk 未定义 Device/s13000_emmc" && exit 1)
+        grep -q 'CONFIG_TARGET_mediatek_filogic_DEVICE_s13000_emmc=y' "$GITHUB_WORKSPACE/configs/s13000.config" || (echo "❌ s13000.config 未启用设备" && exit 1)
 
         echo "[OK] triple set & config ready"
 
-    - name: Build firmware (单线程最稳方案)
+    - name: Build firmware
       run: |
         cd /mnt/immortalwrt
         make defconfig
 
-        # 每 5 分钟输出一行日志，防止 GitHub Actions 误判卡死
         ( while true; do echo "[INFO] Build running... $(date)"; sleep 300; done ) &
         LOGGER_PID=$!
 
         make -j1 V=s
 
-        kill $LOGGER_PID
+        kill $LOGGER_PID || true
 
     - name: Collect firmware
       run: |
@@ -89,5 +77,5 @@ jobs:
     - name: Upload firmware
       uses: actions/upload-artifact@v4
       with:
-        name: sl3000-emmc-24.10-firmware
+        name: s13000-emmc-24.10-firmware
         path: output
