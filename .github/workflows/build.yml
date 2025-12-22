@@ -28,11 +28,11 @@ jobs:
 
     - name: 克隆 ImmortalWrt 24.10
       run: |
-        git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git -b openwrt-24.10 /mnt/immortalwrt
+        git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git -b openwrt-24.10 /home/runner/immortalwrt
 
     - name: 移除损坏的 MT7986 补丁
       run: |
-        rm -f /mnt/immortalwrt/target/linux/mediatek/patches-6.6/999-fix-mt7986.patch || true
+        rm -f /home/runner/immortalwrt/target/linux/mediatek/patches-6.6/999-fix-mt7986.patch || true
 
     - name: 准备 S13000 三重套装
       run: |
@@ -41,13 +41,13 @@ jobs:
 
     - name: 预检 S13000 三重套装
       run: |
-        cd /mnt/immortalwrt
+        cd /home/runner/immortalwrt
         echo "=== S13000 triple-set pre-check ==="
         grep s13000 .config && echo "[OK] triple set & config ready"
 
     - name: 构建固件
       run: |
-        cd /mnt/immortalwrt
+        cd /home/runner/immortalwrt
         make defconfig
         echo "[INFO] Build running..."
         make -j$(nproc) || make -j1 V=s
@@ -55,7 +55,7 @@ jobs:
     - name: 收集固件
       run: |
         mkdir -p output
-        cp -rf /mnt/immortalwrt/bin/targets/*/*/* output/ || true
+        cp -rf /home/runner/immortalwrt/bin/targets/*/*/* output/ || true
 
     - name: 上传固件
       uses: actions/upload-artifact@v4
