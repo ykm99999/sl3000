@@ -60,7 +60,7 @@ jobs:
         restore-keys: dl-${{ runner.os }}-
 
     # ============================
-    # 运行你仓库里唯一的准备脚本（固定名称）
+    # 固定脚本名称（永远不变）
     # ============================
     - name: Prepare SL3000
       run: |
@@ -68,7 +68,7 @@ jobs:
         ./scripts/prepare_s13000.sh
 
     # ============================
-    # 构建固件（fail-fast）
+    # 构建固件（fail-fast + tools/install 修复）
     # ============================
     - name: Build firmware
       run: |
@@ -79,10 +79,13 @@ jobs:
 
         make defconfig
 
+        # 修复 tools/compile.mk 缺失问题
+        make tools/install -j1 V=s
+
         # fail-fast：10 分钟无输出自动失败
         timeout 600 make -j1 V=s || {
-          echo "❌ 构建失败，打印最后 200 行日志："
-          tail -n 200 build.log || true
+          echo "❌ 构建失败，收集错误日志..."
+          tail -n 200 build.log > error.log || echo "无 build.log" > error.log
           exit 1
         }
 
@@ -105,17 +108,31 @@ jobs:
         key: dl-${{ runner.os }}-${{ github.sha }}
 
     # ============================
-    # 收集固件
+    # 构建失败 → 发布错误日志
+    # ============================
+    - name: Release error log
+      if: failure()
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: build-error-${{ github.run_number }}
+        name: "构建失败日志 #${{ github.run_number }}"
+        body: |
+          本次构建失败，以下为错误日志（最后 200 行）。
+        files: error.log
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # ============================
+    # 构建成功 → 发布固件
     # ============================
     - name: Collect firmware
+      if: success()
       run: |
         mkdir -p output
         cp -rf /home/runner/immortalwrt/bin/targets/*/*/* output/
 
-    # ============================
-    # 发布 Release
-    # ============================
     - name: Release firmware
+      if: success()
       uses: softprops/action-gh-release@v2
       with:
         tag_name: sl3000-${{ github.run_number }}
