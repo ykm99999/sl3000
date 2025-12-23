@@ -38,7 +38,7 @@ jobs:
           file wget python3 python3-pip ccache
 
     # ============================
-    # 4. 恢复 dl 缓存（安全）
+    # 4. dl 缓存（安全，不缓存 toolchain）
     # ============================
     - name: Cache dl
       uses: actions/cache@v4
@@ -64,7 +64,7 @@ jobs:
         ./scripts/prepare_s13000.sh
 
     # ============================
-    # 7. 构建固件（fail-fast + tools/install 修复）
+    # 7. 构建固件（修复 tools + fail-fast）
     # ============================
     - name: Build firmware
       run: |
@@ -79,7 +79,7 @@ jobs:
         make tools/install -j1 V=s
 
         # fail-fast：10 分钟无输出自动失败
-        timeout 600 make -j1 V=s || {
+        timeout 600 make -j1 V=s > build.log 2>&1 || {
           echo "❌ 构建失败，收集错误日志..."
           tail -n 200 build.log > error.log || echo "无 build.log" > error.log
           exit 1
