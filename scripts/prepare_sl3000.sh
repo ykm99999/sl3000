@@ -7,15 +7,10 @@ CONFIG="$ROOT/.config"
 echo "===== SL3000 构建准备（全功能修复版）====="
 
 # ============================
-# 1. 生成 .config（只写目标）
+# 1. 使用仓库提供的 config
 # ============================
-cat > "$CONFIG" <<'EOF'
-CONFIG_TARGET_MEDIATEK=y
-CONFIG_TARGET_MEDIATEK_FILOGIC=y
-CONFIG_TARGET_MEDIATEK_FILOGIC_DEVICE_sl3000=y
-CONFIG_TARGET_ROOTFS_SQUASHFS=y
-EOF
-echo "✅ .config 已生成 → $CONFIG"
+cp configs/s13000.config "$CONFIG"
+echo "✅ 已复制仓库配置 → $CONFIG"
 
 # ============================
 # 2. RootFS 依赖预检查
@@ -40,8 +35,8 @@ echo "✅ RootFS 依赖检查完成"
 # 3. DTS/MK 三件套复制
 # ============================
 echo "---- DTS/MK 三件套 ----"
-cp dts/mt7981b-sl3000-emmc.dts "$ROOT/target/linux/mediatek/dts/"
-cp image/filogic.mk "$ROOT/target/linux/mediatek/image/"
+cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts "$ROOT/target/linux/mediatek/dts/"
+cp target/linux/mediatek/image/filogic.mk "$ROOT/target/linux/mediatek/image/"
 echo "✅ DTS/MK 已复制"
 
 # ============================
