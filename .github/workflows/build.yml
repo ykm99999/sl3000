@@ -47,20 +47,19 @@ jobs:
       uses: actions/cache@v4
       with:
         path: /home/runner/immortalwrt/dl
-        key: dl-${{ runner.os }}
-        restore-keys: dl-
+        key: "dl-${{ runner.os }}"
+        restore-keys: "dl-"
 
     - name: Cache ccache
       uses: actions/cache@v4
       with:
         path: ~/.ccache
-        key: ccache-${{ runner.os }}-${{ github.run_id }}
-        restore-keys: ccache-${{ runner.os }}-
+        key: "ccache-${{ runner.os }}-${{ github.run_id }}"
+        restore-keys: "ccache-${{ runner.os }}-"
 
-    - name: Prepare SL3000 (V6: 禁用 autoreconf + jobserver)
+    - name: Prepare SL3000 (V6.1: 禁用 autoreconf + jobserver)
       run: |
         set -e
-
         ROOT="/home/runner/immortalwrt"
         CONFIG="$ROOT/.config"
         DTS_DIR="$ROOT/target/linux/mediatek/dts"
@@ -83,15 +82,12 @@ jobs:
         make defconfig
 
         grep -q "sl3000" "$CONFIG" || echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> "$CONFIG"
-        grep -q "sl3000" "$CONFIG"
 
         [ -f "$DTS_DIR/${DTS_NAME}.dts" ]
 
         grep -q "$DTB_NAME" "$MF" || echo "dtb-y += ${DTB_NAME}" >> "$MF"
-        grep -q "$DTB_NAME" "$MF"
 
         grep -q "sl3000" "$MK_DIR/$MK_NAME" || cp -f target/linux/mediatek/image/filogic.mk "$MK_DIR/"
-        grep -q "sl3000" "$MK_DIR/$MK_NAME"
 
         sed -i "/^CONFIG_PACKAGE_default-settings=y/d" "$CONFIG"
         grep -q "^CONFIG_PACKAGE_luci=y" "$CONFIG" || echo "CONFIG_PACKAGE_luci=y" >> "$CONFIG"
@@ -188,9 +184,15 @@ jobs:
     - name: Release firmware
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: sl3000-${{ github.run_number }}
-        name: SL3000 Firmware Build #${{ github.run_number }}
+        tag_name: "sl3000-${{ github.run_number }}"
+        name: "SL3000 Firmware Build #${{ github.run_number }}"
         body: |
           自动构建固件（SL3000 / ImmortalWrt 24.10）
           - 构建编号：${{ github.run_number }}
-          - 全链路自动修复（CONFIG/DTS/M
+          - 全链路自动修复（CONFIG/DTS/MK/feeds/dl/tools/patch/overlay）
+          - 禁用 autoreconf + 禁用 jobserver
+          - 首启自动扩容 EMMC 根分区
+          - 自动生成 SHA256 校验文件
+        files: |
+          /home/runner/immortalwrt/bin/targets/mediatek/filogic/*
+          /home/runner/immortalwrt/bin/targets/mediatek
