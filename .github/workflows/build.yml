@@ -64,7 +64,6 @@ jobs:
         CONFIG="$ROOT/.config"
 
         echo "===== SL3000 全自动修复准备开始 ====="
-
         cd "$ROOT"
 
         echo "---- defconfig 展开 ----"
@@ -91,12 +90,12 @@ jobs:
         find target -name "*.rej" -delete
         find target -name "*.orig" -delete
 
+        echo "---- 修复 DTS include 路径 ----"
+        sed -i 's#mediatek/mt7981.dtsi#mt7981.dtsi#g' target/linux/mediatek/dts/*.dts || true
+
         echo "---- 修复 overlay 分区大小 ----"
         sed -i 's/IMAGE_SIZE := .*/IMAGE_SIZE := 268435456/' \
           target/linux/mediatek/image/filogic.mk || true
-
-        echo "---- 修复 DTS include 路径 ----"
-        sed -i 's#mediatek/mt7981.dtsi#mt7981.dtsi#g' target/linux/mediatek/dts/*.dts || true
 
         echo "---- 清理构建缓存 ----"
         rm -rf "$ROOT/tmp"/* "$ROOT/build_dir"/* "$ROOT/staging_dir" || true
