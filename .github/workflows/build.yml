@@ -57,7 +57,7 @@ jobs:
         key: ccache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: ccache-${{ runner.os }}-
 
-    - name: Prepare SL3000 (方案A：禁用 autoreconf)
+    - name: Prepare SL3000 (V6: 禁用 autoreconf + jobserver)
       run: |
         set -e
 
@@ -72,6 +72,11 @@ jobs:
         MK_NAME="filogic.mk"
 
         cd "$ROOT"
+
+        export MAKEFLAGS=
+        export PARALLEL_JOBS=1
+        export FORCE_UNSAFE_CONFIGURE=1
+        export NOCONFIGURE=1
 
         echo "===== SL3000 自动修复开始 ====="
 
@@ -100,16 +105,20 @@ jobs:
 
         rm -rf "$ROOT/tmp"/* "$ROOT/build_dir"/* "$ROOT/staging_dir" || true
 
-        echo "---- 禁用 autoreconf（方案A） ----"
+        echo "---- 禁用 autoreconf ----"
         mkdir -p "$ROOT/staging_dir/host/bin"
         echo -e '#!/bin/sh\nexit 0' > "$ROOT/staging_dir/host/bin/autoreconf"
         chmod +x "$ROOT/staging_dir/host/bin/autoreconf"
-        export AUTORECONF="$ROOT/staging_dir/host/bin/autoreconf"
-        export FORCE_UNSAFE_CONFIGURE=1
-        export NOCONFIGURE=1
 
-        echo "---- 工具链修复（不会再死锁） ----"
-        timeout 300 make tools/compile -j1 V=s || exit 1
+        echo "---- 工具链修复（彻底隔离环境） ----"
+        env -i \
+          PATH="$PATH" \
+          HOME="$HOME" \
+          CCACHE_DIR="$HOME/.ccache" \
+          MAKEFLAGS= \
+          FORCE_UNSAFE_CONFIGURE=1 \
+          NOCONFIGURE=1 \
+          make tools/compile -j1 V=s || exit 1
 
         echo "---- dl 修复 ----"
         chmod -R 755 dl
@@ -184,12 +193,4 @@ jobs:
         body: |
           自动构建固件（SL3000 / ImmortalWrt 24.10）
           - 构建编号：${{ github.run_number }}
-          - 全链路自动修复（CONFIG/DTS/MK/feeds/dl/tools/patch/overlay）
-          - 禁用 autoreconf（彻底避免 wait() 死锁）
-          - 首启自动扩容 EMMC 根分区
-          - 自动生成 SHA256 校验文件
-        files: |
-          /home/runner/immortalwrt/bin/targets/mediatek/filogic/*
-          /home/runner/immortalwrt/bin/targets/mediatek/filogic/SHA256SUMS
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          - 全链路自动修复（CONFIG/DTS/M
