@@ -80,19 +80,18 @@ jobs:
           make download -j8
         }
 
-        make image PROFILE=sl3000 \
-          PACKAGES="$(grep '^CONFIG_PACKAGE_' .config | sed 's/CONFIG_PACKAGE_//;s/=y//')" \
-          FILES="" \
-          V=s | tee build.log || {
-            echo "❌ 构建失败，收集错误日志..."
-            if [ -f build.log ]; then
-              tail -n 200 build.log > error.log
-              tail -n 50 build.log
-            else
-              echo "无 build.log 文件，构建异常终止。" > error.log
-            fi
-            exit 1
-          }
+        make image PROFILE=sl3000 V=s | tee build.log
+        RESULT=$?
+        if [ $RESULT -ne 0 ]; then
+          echo "❌ 构建失败，收集错误日志..."
+          if [ -f build.log ]; then
+            tail -n 200 build.log > error.log
+            tail -n 50 build.log
+          else
+            echo "无 build.log 文件，构建异常终止。" > error.log
+          fi
+          exit 1
+        fi
 
         df -h
         ccache -s || true
