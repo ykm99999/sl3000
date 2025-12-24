@@ -58,7 +58,7 @@ jobs:
         key: ccache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: ccache-${{ runner.os }}-
 
-    - name: Prepare SL3000（自动修复 + 三件套自动对齐 + 自动扩容 EMMC 注入）
+    - name: Prepare SL3000 (auto fix + emmc script)
       run: |
         ROOT="/home/runner/immortalwrt"
         CONFIG="$ROOT/.config"
@@ -74,145 +74,62 @@ jobs:
 
         echo "===== SL3000 全自动修复开始 ====="
 
-        ###############################################
-        # 0. defconfig 展开
-        ###############################################
         make defconfig
 
-        ###############################################
-        # 1. CONFIG 自动检测 + 自动修复 + 自动验证
-        ###############################################
         echo "---- CONFIG 自动检测 ----"
-
         if grep -q "sl3000" "$CONFIG"; then
-            echo "ℹ️ CONFIG 已包含 sl3000"
+            echo "CONFIG 已包含 sl3000"
         else
-            echo "⚠️ CONFIG 未启用 sl3000 → 自动修复"
+            echo "CONFIG 未启用 sl3000 → 自动修复"
             echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> "$CONFIG"
         fi
+        grep -q "sl3000" "$CONFIG" || exit 1
 
-        if grep -q "sl3000" "$CONFIG"; then
-            echo "✅ CONFIG sl3000 验证成功"
-        else
-            echo "❌ CONFIG sl3000 修复失败"
-            exit 1
-        fi
-
-        ###############################################
-        # 2. DTS 自动检测 + 自动注册 + 自动验证
-        ###############################################
         echo "---- DTS 自动检测 ----"
-
-        if [ -f "$DTS_DIR/${DTS_NAME}.dts" ]; then
-            echo "✅ DTS 文件存在: ${DTS_NAME}.dts"
-        else
-            echo "❌ DTS 文件不存在: ${DTS_NAME}.dts"
-            exit 1
-        fi
+        [ -f "$DTS_DIR/${DTS_NAME}.dts" ] || exit 1
 
         echo "---- DTS 自动注册 ----"
+        grep -q "$DTB_NAME" "$MF" || echo "dtb-y += ${DTB_NAME}" >> "$MF"
+        grep -q "$DTB_NAME" "$MF" || exit 1
 
-        if grep -q "$DTB_NAME" "$MF"; then
-            echo "ℹ️ DTS 已注册: $DTB_NAME"
-        else
-            echo "⚠️ DTS 未注册 → 自动写入 Makefile"
-            echo "dtb-y += ${DTB_NAME}" >> "$MF"
-        fi
-
-        if grep -q "$DTB_NAME" "$MF"; then
-            echo "✅ DTS 注册验证成功: $DTB_NAME"
-        else
-            echo "❌ DTS 注册失败"
-            exit 1
-        fi
-
-        ###############################################
-        # 3. MK 自动检测 + 自动对齐 + 自动验证
-        ###############################################
         echo "---- MK 自动检测 ----"
+        grep -q "sl3000" "$MK_DIR/$MK_NAME" || cp -f target/linux/mediatek/image/filogic.mk "$MK_DIR/"
+        grep -q "sl3000" "$MK_DIR/$MK_NAME" || exit 1
 
-        if grep -q "sl3000" "$MK_DIR/$MK_NAME"; then
-            echo "ℹ️ filogic.mk 已包含 sl3000"
-        else
-            echo "⚠️ filogic.mk 未包含 sl3000 → 自动对齐"
-            cp -f target/linux/mediatek/image/filogic.mk "$MK_DIR/"
-        fi
-
-        if grep -q "sl3000" "$MK_DIR/$MK_NAME"; then
-            echo "✅ filogic.mk 对齐成功"
-        else
-            echo "❌ filogic.mk 对齐失败"
-            exit 1
-        fi
-
-        ###############################################
-        # 4. RootFS 自动修复
-        ###############################################
         grep -q "^CONFIG_PACKAGE_luci=y" "$CONFIG" || echo "CONFIG_PACKAGE_luci=y" >> "$CONFIG"
         sed -i "/^CONFIG_PACKAGE_default-settings=y/d" "$CONFIG"
-        grep -q "^CONFIG_PACKAGE_luci-app-store=y" "$CONFIG" && \
-        ! grep -q "^CONFIG_PACKAGE_luci-base=y" "$CONFIG" && \
-        echo "CONFIG_PACKAGE_luci-base=y" >> "$CONFIG"
 
         find "$ROOT/dl" -size 0 -delete || true
-
-        ###############################################
-        # 5. patch 冲突清理
-        ###############################################
         find target -name "*.rej" -delete
         find target -name "*.orig" -delete
 
-        ###############################################
-        # 6. overlay / DTS include 修复
-        ###############################################
         sed -i 's#mediatek/mt7981.dtsi#mt7981.dtsi#g' target/linux/mediatek/dts/*.dts || true
         sed -i 's/IMAGE_SIZE := .*/IMAGE_SIZE := 268435456/' \
           target/linux/mediatek/image/filogic.mk || true
 
-        ###############################################
-        # 7. 构建缓存清理
-        ###############################################
         rm -rf "$ROOT/tmp"/* "$ROOT/build_dir"/* "$ROOT/staging_dir" || true
 
-        ###############################################
-        # 8. 工具链自动修复
-        ###############################################
         make tools/compile -j1 V=s || {
             rm -rf "$ROOT/build_dir/host/stamp" "$ROOT/tools/stamp" "$ROOT/staging_dir/host/stamp"
             make tools/compile -j1 V=s
         }
 
-        ###############################################
-        # 9. dl 自动修复
-        ###############################################
         chmod -R 755 dl
         make download -j8 || {
             rm -rf "$ROOT/dl"/*
             make download -j8
         }
 
-        ###############################################
-        # 10. feeds 自动修复
-        ###############################################
         ./scripts/feeds clean
         ./scripts/feeds update -a || true
         ./scripts/feeds install -a || true
 
-        ###############################################
-        # 11. kernel_oldconfig 自动修复
-        ###############################################
         yes "" | make kernel_oldconfig
 
-        ###############################################
-        # 12. ccache 初始化
-        ###############################################
         export CCACHE_DIR=~/.ccache
         ccache -M 2G || true
         ccache -z || true
 
-        ###############################################
-        # 13. 注入 EMMC 自动扩容脚本（首启自动扩容根分区）
-        ###############################################
         echo "---- 注入 EMMC 自动扩容脚本 ----"
         mkdir -p files/etc/init.d
         cat > files/etc/init.d/emmc-resize << 'EOF'
@@ -265,18 +182,15 @@ EOF
       run: |
         cd /home/runner/immortalwrt/bin/targets/mediatek/filogic/
         sha256sum * > SHA256SUMS
-        echo "生成的 SHA256 校验内容如下："
         cat SHA256SUMS
 
     - name: Upload firmware
-      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: firmware
         path: /home/runner/immortalwrt/bin/targets/mediatek/filogic/*
 
     - name: Release firmware
-      if: success()
       uses: softprops/action-gh-release@v2
       with:
         tag_name: sl3000-${{ github.run_number }}
