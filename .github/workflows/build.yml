@@ -8,6 +8,9 @@ jobs:
     runs-on: "ubuntu-22.04"
 
     steps:
+    - name: "Start timer"
+      run: echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
+
     - name: "Checkout repo"
       uses: "actions/checkout@v4"
 
@@ -25,13 +28,6 @@ jobs:
           gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev \
           file wget python3 python3-pip ccache perl pkg-config libelf-dev
 
-    - name: "Cache dl"
-      uses: "actions/cache@v4"
-      with:
-        path: "/home/runner/immortalwrt/dl"
-        key: "dl-${{ runner.os }}"
-        restore-keys: "dl-"
-
     - name: "Clean old ImmortalWrt"
       run: rm -rf /home/runner/immortalwrt
 
@@ -40,8 +36,23 @@ jobs:
         git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git \
           -b openwrt-24.10 /home/runner/immortalwrt
 
+    - name: "Cache dl"
+      uses: "actions/cache@v4"
+      with:
+        path: "/home/runner/immortalwrt/dl"
+        key: "dl-${{ runner.os }}"
+        restore-keys: "dl-"
+
+    - name: "Cache ccache"
+      uses: "actions/cache@v4"
+      with:
+        path: ~/.ccache
+        key: ccache-${{ runner.os }}-${{ github.run_id }}
+        restore-keys: ccache-${{ runner.os }}-
+
     - name: "Prepare SL3000"
       run: |
+        cd /home/runner/immortalwrt
         chmod +x scripts/prepare_sl3000.sh
         ./scripts/prepare_sl3000.sh
 
@@ -52,33 +63,36 @@ jobs:
         export CC="ccache gcc"
         export CXX="ccache g++"
 
+        ./scripts/feeds update -a || true
+        ./scripts/feeds install -a || true
+
         make defconfig
 
-        # 自动修复工具链
         make tools/compile -j1 V=s || {
           echo "⚠️ 工具链编译失败，自动清理并重试..."
           rm -rf build_dir/host/stamp tools/stamp staging_dir/host/stamp
           make tools/compile -j1 V=s
         }
 
-        # 自动修复 dl 下载失败
         make download -j8 || {
           echo "⚠️ dl 下载失败，自动清理并重试..."
           rm -rf dl/*
           make download -j8
         }
 
-        # 自动修复 feeds
-        ./scripts/feeds update -a || true
-        ./scripts/feeds install -a || true
-
-        # 构建 world
-        timeout 1200 make -j1 V=s | tee build.log || {
-          echo "❌ 构建失败，收集错误日志..."
-          tail -n 200 build.log > error.log || echo "无 build.log" > error.log
-          tail -n 50 build.log
-          exit 1
-        }
+        make image PROFILE=sl3000 \
+          PACKAGES="$(grep '^CONFIG_PACKAGE_' .config | sed 's/CONFIG_PACKAGE_//;s/=y//')" \
+          FILES="" \
+          V=s | tee build.log || {
+            echo "❌ 构建失败，收集错误日志..."
+            if [ -f build.log ]; then
+              tail -n 200 build.log > error.log
+              tail -n 50 build.log
+            else
+              echo "无 build.log" > error.log
+            fi
+            exit 1
+          }
 
         df -h
         ccache -s || true
@@ -89,7 +103,12 @@ jobs:
     - name: "Check firmware output"
       run: |
         echo "=== 固件输出检查 ==="
-        ls -lh /home/runner/immortalwrt/bin/targets/mediatek/filogic/ || echo "❌ 没有生成固件"
+        find /home/runner/immortalwrt/bin/targets -type f -name "*.bin" -exec ls -lh {} \; || echo "❌ 没有生成固件"
+
+    - name: "Print build duration"
+      run: |
+        BUILD_END=$(date +%s)
+        echo "⏱️ 构建耗时：$((BUILD_END - BUILD_START)) 秒"
 
     - name: "Upload error log"
       if: failure()
@@ -114,7 +133,7 @@ jobs:
         body: |
           自动构建固件（SL3000 / ImmortalWrt 24.10）
           - 构建编号：${{ github.run_number }}
-          - 缓存：dl
+          - 缓存：dl / ccache
           - 自动修复：工具链 / dl / feeds / 磁盘
         files: "/home/runner/immortalwrt/bin/targets/mediatek/filogic/*"
       env:
