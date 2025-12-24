@@ -57,8 +57,10 @@ jobs:
         key: ccache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: ccache-${{ runner.os }}-
 
-    - name: Prepare SL3000 (auto fix + emmc script)
+    - name: Prepare SL3000 (fail-fast)
       run: |
+        set -e
+
         ROOT="/home/runner/immortalwrt"
         CONFIG="$ROOT/.config"
         DTS_DIR="$ROOT/target/linux/mediatek/dts"
@@ -71,23 +73,23 @@ jobs:
 
         cd "$ROOT"
 
-        echo "===== SL3000 全自动修复开始 ====="
+        echo "===== SL3000 自动修复开始 ====="
 
         make defconfig
 
         grep -q "sl3000" "$CONFIG" || echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> "$CONFIG"
-        grep -q "sl3000" "$CONFIG" || exit 1
+        grep -q "sl3000" "$CONFIG"
 
-        [ -f "$DTS_DIR/${DTS_NAME}.dts" ] || exit 1
+        [ -f "$DTS_DIR/${DTS_NAME}.dts" ]
 
         grep -q "$DTB_NAME" "$MF" || echo "dtb-y += ${DTB_NAME}" >> "$MF"
-        grep -q "$DTB_NAME" "$MF" || exit 1
+        grep -q "$DTB_NAME" "$MF"
 
         grep -q "sl3000" "$MK_DIR/$MK_NAME" || cp -f target/linux/mediatek/image/filogic.mk "$MK_DIR/"
-        grep -q "sl3000" "$MK_DIR/$MK_NAME" || exit 1
+        grep -q "sl3000" "$MK_DIR/$MK_NAME"
 
-        grep -q "^CONFIG_PACKAGE_luci=y" "$CONFIG" || echo "CONFIG_PACKAGE_luci=y" >> "$CONFIG"
         sed -i "/^CONFIG_PACKAGE_default-settings=y/d" "$CONFIG"
+        grep -q "^CONFIG_PACKAGE_luci=y" "$CONFIG" || echo "CONFIG_PACKAGE_luci=y" >> "$CONFIG"
 
         find "$ROOT/dl" -size 0 -delete || true
         find target -name "*.rej" -delete
@@ -98,17 +100,14 @@ jobs:
 
         rm -rf "$ROOT/tmp"/* "$ROOT/build_dir"/* "$ROOT/staging_dir" || true
 
-        make tools/compile -j1 V=s || {
-          rm -rf "$ROOT/build_dir/host/stamp" "$ROOT/tools/stamp" "$ROOT/staging_dir/host/stamp"
-          make tools/compile -j1 V=s
-        }
+        echo "---- 工具链修复（5 分钟超时） ----"
+        timeout 300 make tools/compile -j1 V=s || exit 1
 
+        echo "---- dl 修复 ----"
         chmod -R 755 dl
-        make download -j8 || {
-          rm -rf "$ROOT/dl"/*
-          make download -j8
-        }
+        make download -j8 || exit 1
 
+        echo "---- feeds 修复 ----"
         ./scripts/feeds clean
         ./scripts/feeds update -a || true
         ./scripts/feeds install -a || true
@@ -121,30 +120,28 @@ jobs:
 
         echo "---- 写入 EMMC 自动扩容脚本 ----"
         mkdir -p files/etc/init.d
-        echo '#!/bin/sh /etc/rc.common' > files/etc/init.d/emmc-resize
-        echo 'START=99' >> files/etc/init.d/emmc-resize
-        echo 'STOP=10' >> files/etc/init.d/emmc-resize
-        echo '' >> files/etc/init.d/emmc-resize
-        echo 'start() {' >> files/etc/init.d/emmc-resize
-        echo '    FLAG=/etc/.emmc_resized' >> files/etc/init.d/emmc-resize
-        echo '    [ -f "$FLAG" ] && return 0' >> files/etc/init.d/emmc-resize
-        echo '' >> files/etc/init.d/emmc-resize
-        echo '    rootdev="$(awk '\''$2=="/"{print $1}'\'' /proc/mounts)"' >> files/etc/init.d/emmc-resize
-        echo '    [ -b "$rootdev" ] || return 0' >> files/etc/init.d/emmc-resize
-        echo '' >> files/etc/init.d/emmc-resize
-        echo '    if command -v parted >/dev/null 2>&1 && command -v resize2fs >/dev/null 2>&1; then' >> files/etc/init.d/emmc-resize
-        echo '        base="${rootdev%p[0-9]*}"' >> files/etc/init.d/emmc-resize
-        echo '        part="${rootdev##*p}"' >> files/etc/init.d/emmc-resize
-        echo '        [ "$base" != "$rootdev" ] && [ -n "$part" ] && parted "$base" resizepart "$part" 100% || true' >> files/etc/init.d/emmc-resize
-        echo '        resize2fs "$rootdev" || true' >> files/etc/init.d/emmc-resize
-        echo '        touch "$FLAG"' >> files/etc/init.d/emmc-resize
-        echo '    fi' >> files/etc/init.d/emmc-resize
-        echo '' >> files/etc/init.d/emmc-resize
-        echo '    /etc/init.d/emmc-resize disable >/dev/null 2>&1 || true' >> files/etc/init.d/emmc-resize
-        echo '}' >> files/etc/init.d/emmc-resize
+        {
+          echo '#!/bin/sh /etc/rc.common'
+          echo 'START=99'
+          echo 'STOP=10'
+          echo 'start() {'
+          echo 'FLAG=/etc/.emmc_resized'
+          echo '[ -f "$FLAG" ] && return 0'
+          echo 'rootdev="$(awk '\''$2=="/"{print $1}'\'' /proc/mounts)"'
+          echo '[ -b "$rootdev" ] || return 0'
+          echo 'if command -v parted >/dev/null 2>&1 && command -v resize2fs >/dev/null 2>&1; then'
+          echo 'base="${rootdev%p[0-9]*}"'
+          echo 'part="${rootdev##*p}"'
+          echo '[ "$base" != "$rootdev" ] && [ -n "$part" ] && parted "$base" resizepart "$part" 100% || true'
+          echo 'resize2fs "$rootdev" || true'
+          echo 'touch "$FLAG"'
+          echo 'fi'
+          echo '/etc/init.d/emmc-resize disable >/dev/null 2>&1 || true'
+          echo '}'
+        } > files/etc/init.d/emmc-resize
         chmod +x files/etc/init.d/emmc-resize
 
-        echo "===== SL3000 全自动修复完成 ====="
+        echo "===== SL3000 自动修复完成 ====="
 
     - name: Build firmware
       run: |
@@ -154,7 +151,7 @@ jobs:
         export CXX="ccache g++"
 
         make defconfig
-        make image PROFILE=sl3000 -j$(nproc) V=s || make image PROFILE=sl3000 -j1 V=s
+        make image PROFILE=sl3000 -j$(nproc) V=s || make image PROFILE=sl3000 -j1 V=s || exit 1
 
         df -h
         ccache -s || true
@@ -179,8 +176,7 @@ jobs:
         body: |
           自动构建固件（SL3000 / ImmortalWrt 24.10）
           - 构建编号：${{ github.run_number }}
-          - 三件套自动检测 / 自动注册 / 自动对齐 / 自动修复
-          - 工具链 / dl / feeds / patch / overlay / kernel_oldconfig 全自动修复
+          - 全链路自动修复（CONFIG/DTS/MK/feeds/dl/tools/patch/overlay）
           - 首启自动扩容 EMMC 根分区
           - 自动生成 SHA256 校验文件
         files: |
