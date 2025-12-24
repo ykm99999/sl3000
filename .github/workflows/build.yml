@@ -63,15 +63,6 @@ jobs:
       run: |
         set -e
         ROOT="/home/runner/immortalwrt"
-        CONFIG="$ROOT/.config"
-        DTS_DIR="$ROOT/target/linux/mediatek/dts"
-        MK_DIR="$ROOT/target/linux/mediatek/image"
-        MF="$ROOT/target/linux/mediatek/Makefile"
-
-        DTS_NAME="mt7981b-sl3000-emmc"
-        DTB_NAME="${DTS_NAME}.dtb"
-        MK_NAME="filogic.mk"
-
         cd "$ROOT"
 
         export MAKEFLAGS=
@@ -83,44 +74,28 @@ jobs:
 
         make defconfig
 
-        grep -q "sl3000" "$CONFIG" || echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> "$CONFIG"
+        # DTS/MK 修复
+        grep -q "sl3000" .config || echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> .config
+        grep -q "mt7981b-sl3000-emmc.dtb" target/linux/mediatek/Makefile || echo "dtb-y += mt7981b-sl3000-emmc.dtb" >> target/linux/mediatek/Makefile
 
-        [ -f "$DTS_DIR/${DTS_NAME}.dts" ]
+        sed -i "/^CONFIG_PACKAGE_default-settings=y/d" .config
+        grep -q "^CONFIG_PACKAGE_luci=y" .config || echo "CONFIG_PACKAGE_luci=y" >> .config
 
-        grep -q "$DTB_NAME" "$MF" || echo "dtb-y += ${DTB_NAME}" >> "$MF"
-
-        grep -q "sl3000" "$MK_DIR/$MK_NAME" || cp -f target/linux/mediatek/image/filogic.mk "$MK_DIR/"
-
-        sed -i "/^CONFIG_PACKAGE_default-settings=y/d" "$CONFIG"
-        grep -q "^CONFIG_PACKAGE_luci=y" "$CONFIG" || echo "CONFIG_PACKAGE_luci=y" >> "$CONFIG"
-
-        find "$ROOT/dl" -size 0 -delete || true
+        find dl -size 0 -delete || true
         find target -name "*.rej" -delete
         find target -name "*.orig" -delete
 
-        sed -i 's#mediatek/mt7981.dtsi#mt7981.dtsi#g' target/linux/mediatek/dts/*.dts || true
-        sed -i 's/IMAGE_SIZE := .*/IMAGE_SIZE := 268435456/' target/linux/mediatek/image/filogic.mk || true
-
-        rm -rf "$ROOT/tmp"/* "$ROOT/build_dir"/* "$ROOT/staging_dir" || true
+        rm -rf tmp/* build_dir/* staging_dir/* || true
 
         echo "---- 禁用 autoreconf ----"
-        mkdir -p "$ROOT/staging_dir/host/bin"
-        echo -e '#!/bin/sh\nexit 0' > "$ROOT/staging_dir/host/bin/autoreconf"
-        chmod +x "$ROOT/staging_dir/host/bin/autoreconf"
+        mkdir -p staging_dir/host/bin
+        echo -e '#!/bin/sh\nexit 0' > staging_dir/host/bin/autoreconf
+        chmod +x staging_dir/host/bin/autoreconf
 
         echo "---- 工具链修复（彻底隔离环境） ----"
-        env -i \
-          PATH="$PATH" \
-          HOME="$HOME" \
-          CCACHE_DIR="$HOME/.ccache" \
-          MAKEFLAGS= \
-          FORCE_UNSAFE_CONFIGURE=1 \
-          NOCONFIGURE=1 \
+        env -i PATH="$PATH" HOME="$HOME" CCACHE_DIR="$HOME/.ccache" \
+          MAKEFLAGS= FORCE_UNSAFE_CONFIGURE=1 NOCONFIGURE=1 \
           make tools/compile -j1 V=s || exit 1
-
-        echo "---- dl 修复 ----"
-        chmod -R 755 dl
-        make download -j8 || exit 1
 
         echo "---- feeds 修复 ----"
         ./scripts/feeds clean
@@ -133,29 +108,6 @@ jobs:
         ccache -M 2G || true
         ccache -z || true
 
-        echo "---- 写入 EMMC 自动扩容脚本 ----"
-        mkdir -p files/etc/init.d
-        {
-          echo '#!/bin/sh /etc/rc.common'
-          echo 'START=99'
-          echo 'STOP=10'
-          echo 'start() {'
-          echo 'FLAG=/etc/.emmc_resized'
-          echo '[ -f "$FLAG" ] && return 0'
-          echo 'rootdev="$(awk '\''$2=="/"{print $1}'\'' /proc/mounts)"'
-          echo '[ -b "$rootdev" ] || return 0'
-          echo 'if command -v parted >/dev/null 2>&1 && command -v resize2fs >/dev/null 2>&1; then'
-          echo 'base="${rootdev%p[0-9]*}"'
-          echo 'part="${rootdev##*p}"'
-          echo '[ "$base" != "$rootdev" ] && [ -n "$part" ] && parted "$base" resizepart "$part" 100% || true'
-          echo 'resize2fs "$rootdev" || true'
-          echo 'touch "$FLAG"'
-          echo 'fi'
-          echo '/etc/init.d/emmc-resize disable >/dev/null 2>&1 || true'
-          echo '}'
-        } > files/etc/init.d/emmc-resize
-        chmod +x files/etc/init.d/emmc-resize
-
         echo "===== SL3000 自动修复完成 ====="
 
     - name: Build firmware
@@ -166,7 +118,7 @@ jobs:
         export CXX="ccache g++"
 
         make defconfig
-        make image PROFILE=sl3000 -j$(nproc) V=s || make image PROFILE=sl3000 -j1 V=s || exit 1
+        make -j$(nproc) V=s || make -j1 V=s || exit 1
 
         df -h
         ccache -s || true
