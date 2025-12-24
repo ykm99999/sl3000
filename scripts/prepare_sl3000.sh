@@ -7,15 +7,49 @@ CONFIG="$ROOT/.config"
 echo "===== SL3000 构建准备（最终修复版）====="
 
 # ============================
-# 1. 先复制 .config（必须最先做）
+# 1. 生成 .config（直接写入内容）
 # ============================
-echo "---- 复制 .config ----"
+echo "---- 生成 .config ----"
 
-SRC_CONFIG="configs/sl3000.config"
+cat > "$CONFIG" <<'EOF'
+CONFIG_TARGET_MEDIATEK=y
+CONFIG_TARGET_MEDIATEK_FILOGIC=y
+CONFIG_TARGET_MEDIATEK_FILOGIC_DEVICE_sl3000=y
 
-[ -f "$SRC_CONFIG" ] || { echo "❌ 源 config 不存在：$SRC_CONFIG"; exit 1; }
-cp -f "$SRC_CONFIG" "$CONFIG"
-echo "✅ .config 已复制 → $CONFIG"
+# LuCI + 中文
+CONFIG_PACKAGE_luci=y
+CONFIG_PACKAGE_luci-base=y
+CONFIG_PACKAGE_luci-mod-admin-full=y
+CONFIG_PACKAGE_luci-theme-bootstrap=y
+CONFIG_PACKAGE_luci-app-opkg=y
+CONFIG_PACKAGE_luci-ssl=y
+CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+
+# 网络
+CONFIG_PACKAGE_dnsmasq-full=y
+CONFIG_PACKAGE_ppp-mod-pppoe=y
+
+# WiFi（MT7981 内置）
+CONFIG_PACKAGE_kmod-mt7981-firmware=y
+CONFIG_PACKAGE_kmod-mt76=y
+CONFIG_PACKAGE_kmod-mt76-core=y
+CONFIG_PACKAGE_kmod-mt76-connac=y
+
+# LED / 按键
+CONFIG_PACKAGE_kmod-leds-gpio=y
+CONFIG_PACKAGE_kmod-gpio-button-hotplug=y
+
+# EMMC / 文件系统
+CONFIG_PACKAGE_block-mount=y
+CONFIG_PACKAGE_kmod-fs-ext4=y
+CONFIG_PACKAGE_kmod-mmc=y
+CONFIG_PACKAGE_kmod-mmc-mtk=y
+
+# 使用 squashfs
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+EOF
+
+echo "✅ .config 已生成 → $CONFIG"
 
 
 # ============================
@@ -23,21 +57,18 @@ echo "✅ .config 已复制 → $CONFIG"
 # ============================
 echo "---- RootFS 依赖预检查 ----"
 
-# luci 主包检查
 if ! grep -q "^CONFIG_PACKAGE_luci=y" "$CONFIG"; then
-    echo "⚠️ 未启用 luci 主包 → 自动启用"
+    echo "⚠️ 未启用 luci → 自动启用"
     echo "CONFIG_PACKAGE_luci=y" >> "$CONFIG"
 fi
 
-# default-settings 依赖 luci
 if grep -q "^CONFIG_PACKAGE_default-settings=y" "$CONFIG"; then
     if ! grep -q "^CONFIG_PACKAGE_luci=y" "$CONFIG"; then
-        echo "❌ default-settings 依赖 luci → 自动禁用 default-settings"
+        echo "❌ default-settings 依赖 luci → 自动禁用"
         sed -i "/CONFIG_PACKAGE_default-settings/d" "$CONFIG"
     fi
 fi
 
-# iStore 依赖 luci-base
 if grep -q "CONFIG_PACKAGE_luci-app-store=y" "$CONFIG"; then
     if ! grep -q "CONFIG_PACKAGE_luci-base=y" "$CONFIG"; then
         echo "⚠️ iStore 缺少 luci-base → 自动补齐"
@@ -45,10 +76,7 @@ if grep -q "CONFIG_PACKAGE_luci-app-store=y" "$CONFIG"; then
     fi
 fi
 
-# 清理损坏的 staging_dir
 [ -d "$ROOT/staging_dir" ] && { echo "⚠️ 清理 staging_dir"; rm -rf "$ROOT/staging_dir"; }
-
-# 清理损坏的 dl 包
 [ -d "$ROOT/dl" ] && { echo "⚠️ 清理损坏的 dl 包"; find "$ROOT/dl" -size 0 -delete || true; }
 
 echo "---- RootFS 依赖预检查完成 ----"
