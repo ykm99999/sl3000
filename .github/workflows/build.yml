@@ -48,16 +48,18 @@ jobs:
       with:
         path: /home/runner/immortalwrt/dl
         key: "dl-${{ runner.os }}"
-        restore-keys: "dl-"
+        restore-keys: |
+          dl-
 
     - name: Cache ccache
       uses: actions/cache@v4
       with:
         path: ~/.ccache
         key: "ccache-${{ runner.os }}-${{ github.run_id }}"
-        restore-keys: "ccache-${{ runner.os }}-"
+        restore-keys: |
+          ccache-${{ runner.os }}-
 
-    - name: Prepare SL3000 (V6.1: 禁用 autoreconf + jobserver)
+    - name: Prepare SL3000 (禁用 autoreconf + jobserver)
       run: |
         set -e
         ROOT="/home/runner/immortalwrt"
@@ -195,4 +197,4 @@ jobs:
           - 自动生成 SHA256 校验文件
         files: |
           /home/runner/immortalwrt/bin/targets/mediatek/filogic/*
-          /home/runner/immortalwrt/bin/targets/mediatek
+          /home/runner/immortalwrt/bin/targets/mediatek/filogic/SHA256SUMS
