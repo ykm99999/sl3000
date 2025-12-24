@@ -61,7 +61,7 @@ jobs:
         key: ccache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: ccache-${{ runner.os }}-
 
-    # 执行准备脚本
+    # 执行准备脚本（包含所有自动修复逻辑）
     - name: "Prepare SL3000"
       run: |
         cd /home/runner/immortalwrt
@@ -76,22 +76,7 @@ jobs:
         export CC="ccache gcc"
         export CXX="ccache g++"
 
-        ./scripts/feeds update -a || true
-        ./scripts/feeds install -a || true
-
         make defconfig
-
-        make tools/compile -j1 V=s || {
-          echo "⚠️ 工具链编译失败，自动清理并重试..."
-          rm -rf build_dir/host/stamp tools/stamp staging_dir/host/stamp
-          make tools/compile -j1 V=s
-        }
-
-        make download -j8 || {
-          echo "⚠️ dl 下载失败，自动清理并重试..."
-          rm -rf dl/*
-          make download -j8
-        }
 
         make image PROFILE=sl3000 V=s | tee build.log
         RESULT=$?
@@ -147,7 +132,7 @@ jobs:
           自动构建固件（SL3000 / ImmortalWrt 24.10）
           - 构建编号：${{ github.run_number }}
           - 缓存：dl / ccache
-          - 自动修复：工具链 / dl / feeds / 磁盘
+          - 自动修复：工具链 / dl / feeds / 磁盘 / ccache
         files: "/home/runner/immortalwrt/bin/targets/mediatek/filogic/*"
       env:
         GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
