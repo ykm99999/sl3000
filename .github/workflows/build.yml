@@ -33,8 +33,7 @@ jobs:
           -b openwrt-24.10 /home/runner/immortalwrt
 
     - name: Remove original filogic.mk
-      run: |
-        rm -f /home/runner/immortalwrt/target/linux/mediatek/image/filogic.mk
+      run: rm -f /home/runner/immortalwrt/target/linux/mediatek/image/filogic.mk
 
     - name: Copy SL3000 三件套
       run: |
@@ -76,23 +75,14 @@ jobs:
 
         make defconfig
 
-        echo "---- CONFIG 自动检测 ----"
-        if grep -q "sl3000" "$CONFIG"; then
-            echo "CONFIG 已包含 sl3000"
-        else
-            echo "CONFIG 未启用 sl3000 → 自动修复"
-            echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> "$CONFIG"
-        fi
+        grep -q "sl3000" "$CONFIG" || echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> "$CONFIG"
         grep -q "sl3000" "$CONFIG" || exit 1
 
-        echo "---- DTS 自动检测 ----"
         [ -f "$DTS_DIR/${DTS_NAME}.dts" ] || exit 1
 
-        echo "---- DTS 自动注册 ----"
         grep -q "$DTB_NAME" "$MF" || echo "dtb-y += ${DTB_NAME}" >> "$MF"
         grep -q "$DTB_NAME" "$MF" || exit 1
 
-        echo "---- MK 自动检测 ----"
         grep -q "sl3000" "$MK_DIR/$MK_NAME" || cp -f target/linux/mediatek/image/filogic.mk "$MK_DIR/"
         grep -q "sl3000" "$MK_DIR/$MK_NAME" || exit 1
 
@@ -104,20 +94,19 @@ jobs:
         find target -name "*.orig" -delete
 
         sed -i 's#mediatek/mt7981.dtsi#mt7981.dtsi#g' target/linux/mediatek/dts/*.dts || true
-        sed -i 's/IMAGE_SIZE := .*/IMAGE_SIZE := 268435456/' \
-          target/linux/mediatek/image/filogic.mk || true
+        sed -i 's/IMAGE_SIZE := .*/IMAGE_SIZE := 268435456/' target/linux/mediatek/image/filogic.mk || true
 
         rm -rf "$ROOT/tmp"/* "$ROOT/build_dir"/* "$ROOT/staging_dir" || true
 
         make tools/compile -j1 V=s || {
-            rm -rf "$ROOT/build_dir/host/stamp" "$ROOT/tools/stamp" "$ROOT/staging_dir/host/stamp"
-            make tools/compile -j1 V=s
+          rm -rf "$ROOT/build_dir/host/stamp" "$ROOT/tools/stamp" "$ROOT/staging_dir/host/stamp"
+          make tools/compile -j1 V=s
         }
 
         chmod -R 755 dl
         make download -j8 || {
-            rm -rf "$ROOT/dl"/*
-            make download -j8
+          rm -rf "$ROOT/dl"/*
+          make download -j8
         }
 
         ./scripts/feeds clean
@@ -130,37 +119,29 @@ jobs:
         ccache -M 2G || true
         ccache -z || true
 
-        echo "---- 注入 EMMC 自动扩容脚本 ----"
+        echo "---- 写入 EMMC 自动扩容脚本 ----"
         mkdir -p files/etc/init.d
-        cat > files/etc/init.d/emmc-resize << 'EOF'
-#!/bin/sh /etc/rc.common
-START=99
-STOP=10
-
-start() {
-    FLAG=/etc/.emmc_resized
-    [ -f "$FLAG" ] && return 0
-
-    rootdev="$(awk '$2=="/"{print $1}' /proc/mounts)"
-    echo "EMMC resize: root device is $rootdev"
-
-    [ -b "$rootdev" ] || return 0
-
-    if command -v parted >/dev/null 2>&1 && command -v resize2fs >/dev/null 2>&1; then
-        echo "EMMC resize: trying to grow partition and filesystem"
-        base="${rootdev%p[0-9]*}"
-        part="${rootdev##*p}"
-        if [ "$base" != "$rootdev" ] && [ -n "$part" ]; then
-            parted "$base" resizepart "$part" 100% || true
-        fi
-        resize2fs "$rootdev" || true
-        touch "$FLAG"
-        echo "EMMC resize: done"
-    fi
-
-    /etc/init.d/emmc-resize disable >/dev/null 2>&1 || true
-}
-EOF
+        echo '#!/bin/sh /etc/rc.common' > files/etc/init.d/emmc-resize
+        echo 'START=99' >> files/etc/init.d/emmc-resize
+        echo 'STOP=10' >> files/etc/init.d/emmc-resize
+        echo '' >> files/etc/init.d/emmc-resize
+        echo 'start() {' >> files/etc/init.d/emmc-resize
+        echo '    FLAG=/etc/.emmc_resized' >> files/etc/init.d/emmc-resize
+        echo '    [ -f "$FLAG" ] && return 0' >> files/etc/init.d/emmc-resize
+        echo '' >> files/etc/init.d/emmc-resize
+        echo '    rootdev="$(awk '\''$2=="/"{print $1}'\'' /proc/mounts)"' >> files/etc/init.d/emmc-resize
+        echo '    [ -b "$rootdev" ] || return 0' >> files/etc/init.d/emmc-resize
+        echo '' >> files/etc/init.d/emmc-resize
+        echo '    if command -v parted >/dev/null 2>&1 && command -v resize2fs >/dev/null 2>&1; then' >> files/etc/init.d/emmc-resize
+        echo '        base="${rootdev%p[0-9]*}"' >> files/etc/init.d/emmc-resize
+        echo '        part="${rootdev##*p}"' >> files/etc/init.d/emmc-resize
+        echo '        [ "$base" != "$rootdev" ] && [ -n "$part" ] && parted "$base" resizepart "$part" 100% || true' >> files/etc/init.d/emmc-resize
+        echo '        resize2fs "$rootdev" || true' >> files/etc/init.d/emmc-resize
+        echo '        touch "$FLAG"' >> files/etc/init.d/emmc-resize
+        echo '    fi' >> files/etc/init.d/emmc-resize
+        echo '' >> files/etc/init.d/emmc-resize
+        echo '    /etc/init.d/emmc-resize disable >/dev/null 2>&1 || true' >> files/etc/init.d/emmc-resize
+        echo '}' >> files/etc/init.d/emmc-resize
         chmod +x files/etc/init.d/emmc-resize
 
         echo "===== SL3000 全自动修复完成 ====="
