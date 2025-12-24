@@ -31,11 +31,15 @@ jobs:
         git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git \
           -b openwrt-24.10 /home/runner/immortalwrt
 
+    - name: Remove original filogic.mk
+      run: |
+        rm -f /home/runner/immortalwrt/target/linux/mediatek/image/filogic.mk
+
     - name: Copy SL3000 三件套和脚本
       run: |
         cp configs/s13000.config /home/runner/immortalwrt/.config
         cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts /home/runner/immortalwrt/target/linux/mediatek/dts/
-        cp target/linux/mediatek/image/filogic.mk /home/runner/immortalwrt/target/linux/mediatek/image/
+        cp -f target/linux/mediatek/image/filogic.mk /home/runner/immortalwrt/target/linux/mediatek/image/
         mkdir -p /home/runner/immortalwrt/scripts
         cp scripts/prepare_sl3000.sh /home/runner/immortalwrt/scripts/
 
