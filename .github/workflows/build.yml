@@ -11,7 +11,7 @@ jobs:
     - name: "Start timer"
       run: echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
 
-    # 拉取你自己的仓库（包含 prepare_sl3000.sh 和三件套）
+    # 拉取你自己的仓库（包含 DTS/MK/config/脚本）
     - name: "Checkout my repo"
       uses: actions/checkout@v4
 
@@ -41,9 +41,9 @@ jobs:
     # 把你仓库里的三件套和脚本复制到官方源码目录
     - name: "Copy SL3000 三件套和脚本"
       run: |
-        cp dts/mt7981b-sl3000-emmc.dts /home/runner/immortalwrt/target/linux/mediatek/dts/
-        cp image/filogic.mk /home/runner/immortalwrt/target/linux/mediatek/image/
-        cp .config /home/runner/immortalwrt/.config
+        cp configs/s13000.config /home/runner/immortalwrt/.config
+        cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts /home/runner/immortalwrt/target/linux/mediatek/dts/
+        cp target/linux/mediatek/image/filogic.mk /home/runner/immortalwrt/target/linux/mediatek/image/
         mkdir -p /home/runner/immortalwrt/scripts
         cp scripts/prepare_sl3000.sh /home/runner/immortalwrt/scripts/
 
