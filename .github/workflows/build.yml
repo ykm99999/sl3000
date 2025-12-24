@@ -89,7 +89,7 @@ jobs:
               tail -n 200 build.log > error.log
               tail -n 50 build.log
             else
-              echo "无 build.log" > error.log
+              echo "无 build.log 文件，构建异常终止。" > error.log
             fi
             exit 1
           }
@@ -116,6 +116,7 @@ jobs:
       with:
         name: "error-log"
         path: "error.log"
+        if-no-files-found: ignore
 
     - name: "Upload firmware"
       if: success()
