@@ -11,8 +11,9 @@ jobs:
     - name: "Start timer"
       run: echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
 
-    - name: "Checkout repo"
-      uses: "actions/checkout@v4"
+    # 拉取你自己的仓库（包含 prepare_sl3000.sh 和三件套）
+    - name: "Checkout my repo"
+      uses: actions/checkout@v4
 
     - name: "Free disk space"
       run: |
@@ -31,10 +32,20 @@ jobs:
     - name: "Clean old ImmortalWrt"
       run: rm -rf /home/runner/immortalwrt
 
+    # 克隆官方 ImmortalWrt 源码
     - name: "Clone ImmortalWrt"
       run: |
         git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git \
           -b openwrt-24.10 /home/runner/immortalwrt
+
+    # 把你仓库里的三件套和脚本复制到官方源码目录
+    - name: "Copy SL3000 三件套和脚本"
+      run: |
+        cp dts/mt7981b-sl3000-emmc.dts /home/runner/immortalwrt/target/linux/mediatek/dts/
+        cp image/filogic.mk /home/runner/immortalwrt/target/linux/mediatek/image/
+        cp .config /home/runner/immortalwrt/.config
+        mkdir -p /home/runner/immortalwrt/scripts
+        cp scripts/prepare_sl3000.sh /home/runner/immortalwrt/scripts/
 
     - name: "Cache dl"
       uses: "actions/cache@v4"
@@ -50,12 +61,14 @@ jobs:
         key: ccache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: ccache-${{ runner.os }}-
 
+    # 执行准备脚本
     - name: "Prepare SL3000"
       run: |
         cd /home/runner/immortalwrt
         chmod +x scripts/prepare_sl3000.sh
         ./scripts/prepare_sl3000.sh
 
+    # 构建固件
     - name: "Build firmware"
       run: |
         cd /home/runner/immortalwrt
