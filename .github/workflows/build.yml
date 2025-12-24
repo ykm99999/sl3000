@@ -57,7 +57,7 @@ jobs:
         key: ccache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: ccache-${{ runner.os }}-
 
-    - name: Prepare SL3000 (fail-fast)
+    - name: Prepare SL3000 (方案A：禁用 autoreconf)
       run: |
         set -e
 
@@ -100,7 +100,15 @@ jobs:
 
         rm -rf "$ROOT/tmp"/* "$ROOT/build_dir"/* "$ROOT/staging_dir" || true
 
-        echo "---- 工具链修复（5 分钟超时） ----"
+        echo "---- 禁用 autoreconf（方案A） ----"
+        mkdir -p "$ROOT/staging_dir/host/bin"
+        echo -e '#!/bin/sh\nexit 0' > "$ROOT/staging_dir/host/bin/autoreconf"
+        chmod +x "$ROOT/staging_dir/host/bin/autoreconf"
+        export AUTORECONF="$ROOT/staging_dir/host/bin/autoreconf"
+        export FORCE_UNSAFE_CONFIGURE=1
+        export NOCONFIGURE=1
+
+        echo "---- 工具链修复（不会再死锁） ----"
         timeout 300 make tools/compile -j1 V=s || exit 1
 
         echo "---- dl 修复 ----"
@@ -177,6 +185,7 @@ jobs:
           自动构建固件（SL3000 / ImmortalWrt 24.10）
           - 构建编号：${{ github.run_number }}
           - 全链路自动修复（CONFIG/DTS/MK/feeds/dl/tools/patch/overlay）
+          - 禁用 autoreconf（彻底避免 wait() 死锁）
           - 首启自动扩容 EMMC 根分区
           - 自动生成 SHA256 校验文件
         files: |
