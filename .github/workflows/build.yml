@@ -221,24 +221,19 @@ START=99
 STOP=10
 
 start() {
-    # 仅在首次运行时执行
     FLAG=/etc/.emmc_resized
     [ -f "$FLAG" ] && return 0
 
     rootdev="$(awk '$2=="/"{print $1}' /proc/mounts)"
     echo "EMMC resize: root device is $rootdev"
 
-    # 只处理块设备
     [ -b "$rootdev" ] || return 0
 
-    # 尝试扩展分区 & 文件系统（ext4 情形）
     if command -v parted >/dev/null 2>&1 && command -v resize2fs >/dev/null 2>&1; then
         echo "EMMC resize: trying to grow partition and filesystem"
-        # 对常见 mmcblkXpY 设备做简单处理，复杂情况留给手工
         base="${rootdev%p[0-9]*}"
         part="${rootdev##*p}"
         if [ "$base" != "$rootdev" ] && [ -n "$part" ]; then
-            echo "EMMC resize: base=$base part=$part"
             parted "$base" resizepart "$part" 100% || true
         fi
         resize2fs "$rootdev" || true
@@ -246,7 +241,6 @@ start() {
         echo "EMMC resize: done"
     fi
 
-    # 自废
     /etc/init.d/emmc-resize disable >/dev/null 2>&1 || true
 }
 EOF
