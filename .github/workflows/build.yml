@@ -58,7 +58,7 @@ jobs:
         key: ccache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: ccache-${{ runner.os }}-
 
-    - name: Prepare SL3000（自动修复 + 三件套自动对齐）
+    - name: Prepare SL3000（自动修复 + 三件套自动对齐 + 自动扩容 EMMC 注入）
       run: |
         ROOT="/home/runner/immortalwrt"
         CONFIG="$ROOT/.config"
@@ -210,6 +210,48 @@ jobs:
         ccache -M 2G || true
         ccache -z || true
 
+        ###############################################
+        # 13. 注入 EMMC 自动扩容脚本（首启自动扩容根分区）
+        ###############################################
+        echo "---- 注入 EMMC 自动扩容脚本 ----"
+        mkdir -p files/etc/init.d
+        cat > files/etc/init.d/emmc-resize << 'EOF'
+#!/bin/sh /etc/rc.common
+START=99
+STOP=10
+
+start() {
+    # 仅在首次运行时执行
+    FLAG=/etc/.emmc_resized
+    [ -f "$FLAG" ] && return 0
+
+    rootdev="$(awk '$2=="/"{print $1}' /proc/mounts)"
+    echo "EMMC resize: root device is $rootdev"
+
+    # 只处理块设备
+    [ -b "$rootdev" ] || return 0
+
+    # 尝试扩展分区 & 文件系统（ext4 情形）
+    if command -v parted >/dev/null 2>&1 && command -v resize2fs >/dev/null 2>&1; then
+        echo "EMMC resize: trying to grow partition and filesystem"
+        # 对常见 mmcblkXpY 设备做简单处理，复杂情况留给手工
+        base="${rootdev%p[0-9]*}"
+        part="${rootdev##*p}"
+        if [ "$base" != "$rootdev" ] && [ -n "$part" ]; then
+            echo "EMMC resize: base=$base part=$part"
+            parted "$base" resizepart "$part" 100% || true
+        fi
+        resize2fs "$rootdev" || true
+        touch "$FLAG"
+        echo "EMMC resize: done"
+    fi
+
+    # 自废
+    /etc/init.d/emmc-resize disable >/dev/null 2>&1 || true
+}
+EOF
+        chmod +x files/etc/init.d/emmc-resize
+
         echo "===== SL3000 全自动修复完成 ====="
 
     - name: Build firmware
@@ -224,6 +266,13 @@ jobs:
 
         df -h
         ccache -s || true
+
+    - name: Generate SHA256 checksums
+      run: |
+        cd /home/runner/immortalwrt/bin/targets/mediatek/filogic/
+        sha256sum * > SHA256SUMS
+        echo "生成的 SHA256 校验内容如下："
+        cat SHA256SUMS
 
     - name: Upload firmware
       if: success()
@@ -243,7 +292,10 @@ jobs:
           - 构建编号：${{ github.run_number }}
           - 三件套自动检测 / 自动注册 / 自动对齐 / 自动修复
           - 工具链 / dl / feeds / patch / overlay / kernel_oldconfig 全自动修复
-          - 构建模式：无人值守全自动修复
-        files: /home/runner/immortalwrt/bin/targets/mediatek/filogic/*
+          - 首启自动扩容 EMMC 根分区
+          - 自动生成 SHA256 校验文件
+        files: |
+          /home/runner/immortalwrt/bin/targets/mediatek/filogic/*
+          /home/runner/immortalwrt/bin/targets/mediatek/filogic/SHA256SUMS
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
