@@ -94,19 +94,6 @@ jobs:
         df -h
         ccache -s || true
 
-    - name: "Check .config"
-      run: grep CONFIG_TARGET /home/runner/immortalwrt/.config
-
-    - name: "Check firmware output"
-      run: |
-        echo "=== 固件输出检查 ==="
-        find /home/runner/immortalwrt/bin/targets -type f -name "*.bin" -exec ls -lh {} \; || echo "❌ 没有生成固件"
-
-    - name: "Print build duration"
-      run: |
-        BUILD_END=$(date +%s)
-        echo "⏱️ 构建耗时：$((BUILD_END - BUILD_START)) 秒"
-
     - name: "Upload error log"
       if: failure()
       uses: "actions/upload-artifact@v4"
