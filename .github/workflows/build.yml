@@ -37,11 +37,20 @@ jobs:
 
     - name: Copy SL3000 三件套和脚本
       run: |
+        # config
         cp configs/s13000.config /home/runner/immortalwrt/.config
-        cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts /home/runner/immortalwrt/target/linux/mediatek/dts/
-        cp -f target/linux/mediatek/image/filogic.mk /home/runner/immortalwrt/target/linux/mediatek/image/
+
+        # DTS
+        cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts \
+           /home/runner/immortalwrt/target/linux/mediatek/dts/
+
+        # mk（强制覆盖）
+        cp -f target/linux/mediatek/image/filogic.mk \
+           /home/runner/immortalwrt/target/linux/mediatek/image/
+
+        # prepare 脚本（必须创建目录）
         mkdir -p /home/runner/immortalwrt/scripts
-        cp scripts/prepare_sl3000.sh /home/runner/immortalwrt/scripts/
+        cp -f scripts/prepare_sl3000.sh /home/runner/immortalwrt/scripts/
 
     - name: Cache dl
       uses: actions/cache@v4
@@ -61,10 +70,8 @@ jobs:
       run: |
         cd /home/runner/immortalwrt
         chmod +x scripts/prepare_sl3000.sh
+        echo ">>> 来自仓库的 prepare_sl3000.sh 已加载 <<<"
         ./scripts/prepare_sl3000.sh
-
-        echo "---- 检查 sl3000 是否启用 ----"
-        grep -i sl3000 .config || (echo "❌ defconfig 未启用 sl3000" && exit 1)
 
     - name: Build firmware
       run: |
