@@ -61,7 +61,7 @@ jobs:
         key: ccache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: ccache-${{ runner.os }}-
 
-    # 执行准备脚本（包含所有自动修复逻辑）
+    # 执行准备脚本（只做修复和检查）
     - name: "Prepare SL3000"
       run: |
         cd /home/runner/immortalwrt
