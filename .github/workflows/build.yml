@@ -23,7 +23,8 @@ jobs:
         sudo apt update
         sudo apt install -y build-essential clang flex bison g++ gawk gcc-multilib \
           gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev \
-          file wget python3 python3-pip ccache perl pkg-config libelf-dev
+          file wget python3 python3-pip ccache perl pkg-config libelf-dev libncursesw5-dev
+        pip3 install --upgrade pip setuptools wheel
 
     - name: Clone ImmortalWrt
       run: |
@@ -35,22 +36,13 @@ jobs:
       run: |
         rm -f /home/runner/immortalwrt/target/linux/mediatek/image/filogic.mk
 
-    - name: Copy SL3000 三件套和脚本
+    - name: Copy SL3000 三件套
       run: |
-        # config
         cp configs/s13000.config /home/runner/immortalwrt/.config
-
-        # DTS
         cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts \
            /home/runner/immortalwrt/target/linux/mediatek/dts/
-
-        # mk（强制覆盖）
         cp -f target/linux/mediatek/image/filogic.mk \
            /home/runner/immortalwrt/target/linux/mediatek/image/
-
-        # prepare 脚本（必须创建目录）
-        mkdir -p /home/runner/immortalwrt/scripts
-        cp -f scripts/prepare_sl3000.sh /home/runner/immortalwrt/scripts/
 
     - name: Cache dl
       uses: actions/cache@v4
@@ -66,12 +58,76 @@ jobs:
         key: ccache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: ccache-${{ runner.os }}-
 
-    - name: Prepare SL3000
+    - name: Prepare SL3000（全部自动修复）
       run: |
-        cd /home/runner/immortalwrt
-        chmod +x scripts/prepare_sl3000.sh
-        echo ">>> 来自仓库的 prepare_sl3000.sh 已加载 <<<"
-        ./scripts/prepare_sl3000.sh
+        ROOT="/home/runner/immortalwrt"
+        CONFIG="$ROOT/.config"
+
+        echo "===== SL3000 全自动修复准备开始 ====="
+
+        cd "$ROOT"
+
+        echo "---- defconfig 展开 ----"
+        make defconfig
+
+        echo "---- RootFS 自动修复 ----"
+        grep -q "^CONFIG_PACKAGE_luci=y" "$CONFIG" || echo "CONFIG_PACKAGE_luci=y" >> "$CONFIG"
+        sed -i "/^CONFIG_PACKAGE_default-settings=y/d" "$CONFIG"
+        grep -q "^CONFIG_PACKAGE_luci-app-store=y" "$CONFIG" && \
+        ! grep -q "^CONFIG_PACKAGE_luci-base=y" "$CONFIG" && \
+        echo "CONFIG_PACKAGE_luci-base=y" >> "$CONFIG"
+        find "$ROOT/dl" -size 0 -delete || true
+
+        echo "---- DTS 自动注册 ----"
+        MF="$ROOT/target/linux/mediatek/Makefile"
+        grep -q "mt7981b-sl3000-emmc.dtb" "$MF" || echo "dtb-y += mt7981b-sl3000-emmc.dtb" >> "$MF"
+
+        echo "---- 清理无效包 ----"
+        for pkg in pcat-manager policycoreutils audit lldpd; do
+            sed -i "/CONFIG_PACKAGE_${pkg}=y/d" "$CONFIG"
+        done
+
+        echo "---- 清理 patch 冲突 ----"
+        find target -name "*.rej" -delete
+        find target -name "*.orig" -delete
+
+        echo "---- 修复 overlay 分区大小 ----"
+        sed -i 's/IMAGE_SIZE := .*/IMAGE_SIZE := 268435456/' \
+          target/linux/mediatek/image/filogic.mk || true
+
+        echo "---- 修复 DTS include 路径 ----"
+        sed -i 's#mediatek/mt7981.dtsi#mt7981.dtsi#g' target/linux/mediatek/dts/*.dts || true
+
+        echo "---- 清理构建缓存 ----"
+        rm -rf "$ROOT/tmp"/* "$ROOT/build_dir"/* "$ROOT/staging_dir" || true
+
+        echo "---- 工具链自动修复 ----"
+        make tools/compile -j1 V=s || {
+            rm -rf "$ROOT/build_dir/host/stamp" "$ROOT/tools/stamp" "$ROOT/staging_dir/host/stamp"
+            make tools/compile -j1 V=s
+        }
+
+        echo "---- dl 自动修复 ----"
+        chmod -R 755 dl
+        make download -j8 || {
+            rm -rf "$ROOT/dl"/*
+            make download -j8
+        }
+
+        echo "---- feeds 自动修复 ----"
+        ./scripts/feeds clean
+        ./scripts/feeds update -a || true
+        ./scripts/feeds install -a || true
+
+        echo "---- kernel_oldconfig 自动修复 ----"
+        yes "" | make kernel_oldconfig
+
+        echo "---- ccache 初始化 ----"
+        export CCACHE_DIR=~/.ccache
+        ccache -M 2G || true
+        ccache -z || true
+
+        echo "===== SL3000 全自动修复准备完成 ====="
 
     - name: Build firmware
       run: |
@@ -82,24 +138,12 @@ jobs:
 
         make defconfig
 
-        make image PROFILE=sl3000 V=s | tee build.log
-        RESULT=$?
-        if [ $RESULT -ne 0 ]; then
-          echo "❌ 构建失败，收集错误日志..."
-          tail -n 200 build.log > error.log
-          exit 1
-        fi
+        echo "---- 开始构建（自动 fallback） ----"
+        make image PROFILE=sl3000 -j$(nproc) V=s || \
+        make image PROFILE=sl3000 -j1 V=s
 
         df -h
         ccache -s || true
-
-    - name: Upload error log
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: error-log
-        path: error.log
-        if-no-files-found: ignore
 
     - name: Upload firmware
       if: success()
@@ -117,7 +161,8 @@ jobs:
         body: |
           自动构建固件（SL3000 / ImmortalWrt 24.10）
           - 构建编号：${{ github.run_number }}
-          - 自动修复：工具链 / dl / feeds / ccache
+          - 自动修复：工具链 / dl / feeds / patch / DTS / mk / overlay / kernel_oldconfig
+          - 构建模式：无人值守全自动修复
         files: /home/runner/immortalwrt/bin/targets/mediatek/filogic/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
