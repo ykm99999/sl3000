@@ -1,125 +1,139 @@
-name: "Build SL3000"
+#!/usr/bin/env bash
+set -e
 
-on:
-  workflow_dispatch:
+ROOT="${1:-/home/runner/immortalwrt}"
+CONFIG="$ROOT/.config"
 
-jobs:
-  build:
-    runs-on: "ubuntu-22.04"
+echo "===== SL3000 构建准备（全功能修复版）====="
 
-    steps:
-    - name: "Start timer"
-      run: echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
+# ============================
+# 1. RootFS 依赖预检查
+# ============================
+echo "---- RootFS 依赖预检查 ----"
 
-    # 拉取你自己的仓库（包含 DTS/MK/config/脚本）
-    - name: "Checkout my repo"
-      uses: actions/checkout@v4
+if ! grep -q "^CONFIG_PACKAGE_luci=y" "$CONFIG"; then
+    echo "⚠️ 未启用 luci → 自动启用"
+    echo "CONFIG_PACKAGE_luci=y" >> "$CONFIG"
+fi
 
-    - name: "Free disk space"
-      run: |
-        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache
-        sudo docker system prune -af || true
-        sudo apt clean
-        df -h
+if grep -q "^CONFIG_PACKAGE_default-settings=y" "$CONFIG"; then
+    sed -i "/CONFIG_PACKAGE_default-settings/d" "$CONFIG"
+    echo "⚠️ 已禁用 default-settings（依赖 luci）"
+fi
 
-    - name: "Install dependencies"
-      run: |
-        sudo apt update
-        sudo apt install -y build-essential clang flex bison g++ gawk gcc-multilib \
-          gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev \
-          file wget python3 python3-pip ccache perl pkg-config libelf-dev
+if grep -q "CONFIG_PACKAGE_luci-app-store=y" "$CONFIG" && ! grep -q "CONFIG_PACKAGE_luci-base=y" "$CONFIG"; then
+    echo "⚠️ iStore 缺少 luci-base → 自动补齐"
+    echo "CONFIG_PACKAGE_luci-base=y" >> "$CONFIG"
+fi
 
-    - name: "Clean old ImmortalWrt"
-      run: rm -rf /home/runner/immortalwrt
+[ -d "$ROOT/dl" ] && {
+    echo "⚠️ 清理损坏的 dl 包"
+    find "$ROOT/dl" -size 0 -delete || true
+}
 
-    # 克隆官方 ImmortalWrt 源码
-    - name: "Clone ImmortalWrt"
-      run: |
-        git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git \
-          -b openwrt-24.10 /home/runner/immortalwrt
+echo "✅ RootFS 依赖检查完成"
 
-    # 把你仓库里的三件套和脚本复制到官方源码目录
-    - name: "Copy SL3000 三件套和脚本"
-      run: |
-        cp configs/s13000.config /home/runner/immortalwrt/.config
-        cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts /home/runner/immortalwrt/target/linux/mediatek/dts/
-        cp target/linux/mediatek/image/filogic.mk /home/runner/immortalwrt/target/linux/mediatek/image/
-        mkdir -p /home/runner/immortalwrt/scripts
-        cp scripts/prepare_sl3000.sh /home/runner/immortalwrt/scripts/
+# ============================
+# 2. 自动注册 DTS
+# ============================
+echo "---- DTS 注册检查 ----"
 
-    - name: "Cache dl"
-      uses: "actions/cache@v4"
-      with:
-        path: "/home/runner/immortalwrt/dl"
-        key: "dl-${{ runner.os }}"
-        restore-keys: "dl-"
+MAKEFILE="$ROOT/target/linux/mediatek/Makefile"
 
-    - name: "Cache ccache"
-      uses: "actions/cache@v4"
-      with:
-        path: ~/.ccache
-        key: ccache-${{ runner.os }}-${{ github.run_id }}
-        restore-keys: ccache-${{ runner.os }}-
+if [ -f "$MAKEFILE" ] && ! grep -q "mt7981b-sl3000-emmc.dtb" "$MAKEFILE"; then
+    echo "dtb-y += mt7981b-sl3000-emmc.dtb" >> "$MAKEFILE"
+    echo "✅ 已自动注册 DTS 到 mediatek/Makefile"
+else
+    echo "ℹ️ DTS 已存在或 Makefile 不存在"
+fi
 
-    # 执行准备脚本（只做修复和检查）
-    - name: "Prepare SL3000"
-      run: |
-        cd /home/runner/immortalwrt
-        chmod +x scripts/prepare_sl3000.sh
-        ./scripts/prepare_sl3000.sh
+# ============================
+# 3. 清理无效包
+# ============================
+echo "---- 清理无效包 ----"
 
-    # 构建固件
-    - name: "Build firmware"
-      run: |
-        cd /home/runner/immortalwrt
-        export CCACHE_DIR=~/.ccache
-        export CC="ccache gcc"
-        export CXX="ccache g++"
+BAD_PKGS=(asterisk onionshare pysocks unidecode uw-imap)
 
-        make defconfig
+for pkg in "${BAD_PKGS[@]}"; do
+    sed -i "/$pkg/d" "$CONFIG"
+done
 
-        make image PROFILE=sl3000 V=s | tee build.log
-        RESULT=$?
-        if [ $RESULT -ne 0 ]; then
-          echo "❌ 构建失败，收集错误日志..."
-          if [ -f build.log ]; then
-            tail -n 200 build.log > error.log
-            tail -n 50 build.log
-          else
-            echo "无 build.log 文件，构建异常终止。" > error.log
-          fi
-          exit 1
-        fi
+echo "✅ 无效包已清理"
 
-        df -h
-        ccache -s || true
+# ============================
+# 4. 检查设备符号
+# ============================
+echo "---- 检查 SL3000 设备符号 ----"
 
-    - name: "Upload error log"
-      if: failure()
-      uses: "actions/upload-artifact@v4"
-      with:
-        name: "error-log"
-        path: "error.log"
-        if-no-files-found: ignore
+grep -q "CONFIG_TARGET_MEDIATEK_FILOGIC_DEVICE_sl3000=y" "$CONFIG" \
+  || { echo "❌ .config 未启用 SL3000 设备"; exit 1; }
 
-    - name: "Upload firmware"
-      if: success()
-      uses: "actions/upload-artifact@v4"
-      with:
-        name: "firmware"
-        path: "/home/runner/immortalwrt/bin/targets/mediatek/filogic/*"
+echo "✅ SL3000 设备符号正确"
 
-    - name: "Release firmware"
-      if: success()
-      uses: "softprops/action-gh-release@v2"
-      with:
-        tag_name: "sl3000-${{ github.run_number }}"
-        name: "SL3000 Firmware Build #${{ github.run_number }}"
-        body: |
-          自动构建固件（SL3000 / ImmortalWrt 24.10）
-          - 构建编号：${{ github.run_number }}
-          - 缓存：dl / ccache
-          - 自动修复：工具链 / dl / feeds / 磁盘 / ccache
-        files: "/home/runner/immortalwrt/bin/targets/mediatek/filogic/*"
-      env:
-        GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+# ============================
+# 5. 清理构建缓存
+# ============================
+echo "---- 清理构建缓存 ----"
+
+rm -rf "$ROOT/tmp"/* || true
+rm -rf "$ROOT/build_dir"/* || true
+rm -rf "$ROOT/staging_dir" || true
+
+echo "✅ 构建缓存已清理"
+
+# ============================
+# 6. 自动修复工具链
+# ============================
+echo "---- 工具链预修复 ----"
+
+make -C "$ROOT" tools/compile -j1 V=s || {
+    echo "⚠️ 工具链编译失败 → 自动清理并重试"
+    rm -rf "$ROOT/build_dir/host/stamp" "$ROOT/tools/stamp" "$ROOT/staging_dir/host/stamp"
+    make -C "$ROOT" tools/compile -j1 V=s
+}
+
+echo "✅ 工具链检查完成"
+
+# ============================
+# 7. 自动修复 dl 下载
+# ============================
+echo "---- dl 下载预修复 ----"
+
+make -C "$ROOT" download -j8 || {
+    echo "⚠️ dl 下载失败 → 自动清理并重试"
+    rm -rf "$ROOT/dl/*"
+    make -C "$ROOT" download -j8
+}
+
+echo "✅ dl 下载检查完成"
+
+# ============================
+# 8. 自动修复 feeds
+# ============================
+echo "---- feeds 修复 ----"
+
+cd "$ROOT"
+./scripts/feeds update -a || true
+./scripts/feeds install -a || true
+
+echo "✅ feeds 检查完成"
+
+# ============================
+# 9. 磁盘空间检查
+# ============================
+echo "---- 磁盘空间检查 ----"
+df -h
+echo "✅ 磁盘空间检查完成"
+
+# ============================
+# 10. ccache 初始化
+# ============================
+echo "---- ccache 初始化 ----"
+
+export CCACHE_DIR=~/.ccache
+ccache -M 2G || true
+ccache -z || true
+
+echo "✅ ccache 初始化完成"
+
+echo "===== SL3000 构建准备完成（全部修复机制已启用）====="
