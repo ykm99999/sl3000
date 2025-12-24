@@ -63,6 +63,9 @@ jobs:
         chmod +x scripts/prepare_sl3000.sh
         ./scripts/prepare_sl3000.sh
 
+        echo "---- 检查 sl3000 是否启用 ----"
+        grep -i sl3000 .config || (echo "❌ defconfig 未启用 sl3000" && exit 1)
+
     - name: Build firmware
       run: |
         cd /home/runner/immortalwrt
