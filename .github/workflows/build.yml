@@ -58,75 +58,159 @@ jobs:
         key: ccache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: ccache-${{ runner.os }}-
 
-    - name: Prepare SL3000（全部自动修复）
+    - name: Prepare SL3000（自动修复 + 三件套自动对齐）
       run: |
         ROOT="/home/runner/immortalwrt"
         CONFIG="$ROOT/.config"
+        DTS_DIR="$ROOT/target/linux/mediatek/dts"
+        MK_DIR="$ROOT/target/linux/mediatek/image"
+        MF="$ROOT/target/linux/mediatek/Makefile"
 
-        echo "===== SL3000 全自动修复准备开始 ====="
+        DTS_NAME="mt7981b-sl3000-emmc"
+        DTB_NAME="${DTS_NAME}.dtb"
+        MK_NAME="filogic.mk"
+
         cd "$ROOT"
 
-        echo "---- defconfig 展开 ----"
+        echo "===== SL3000 全自动修复开始 ====="
+
+        ###############################################
+        # 0. defconfig 展开
+        ###############################################
         make defconfig
 
-        echo "---- RootFS 自动修复 ----"
+        ###############################################
+        # 1. CONFIG 自动检测 + 自动修复 + 自动验证
+        ###############################################
+        echo "---- CONFIG 自动检测 ----"
+
+        if grep -q "sl3000" "$CONFIG"; then
+            echo "ℹ️ CONFIG 已包含 sl3000"
+        else
+            echo "⚠️ CONFIG 未启用 sl3000 → 自动修复"
+            echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> "$CONFIG"
+        fi
+
+        if grep -q "sl3000" "$CONFIG"; then
+            echo "✅ CONFIG sl3000 验证成功"
+        else
+            echo "❌ CONFIG sl3000 修复失败"
+            exit 1
+        fi
+
+        ###############################################
+        # 2. DTS 自动检测 + 自动注册 + 自动验证
+        ###############################################
+        echo "---- DTS 自动检测 ----"
+
+        if [ -f "$DTS_DIR/${DTS_NAME}.dts" ]; then
+            echo "✅ DTS 文件存在: ${DTS_NAME}.dts"
+        else
+            echo "❌ DTS 文件不存在: ${DTS_NAME}.dts"
+            exit 1
+        fi
+
+        echo "---- DTS 自动注册 ----"
+
+        if grep -q "$DTB_NAME" "$MF"; then
+            echo "ℹ️ DTS 已注册: $DTB_NAME"
+        else
+            echo "⚠️ DTS 未注册 → 自动写入 Makefile"
+            echo "dtb-y += ${DTB_NAME}" >> "$MF"
+        fi
+
+        if grep -q "$DTB_NAME" "$MF"; then
+            echo "✅ DTS 注册验证成功: $DTB_NAME"
+        else
+            echo "❌ DTS 注册失败"
+            exit 1
+        fi
+
+        ###############################################
+        # 3. MK 自动检测 + 自动对齐 + 自动验证
+        ###############################################
+        echo "---- MK 自动检测 ----"
+
+        if grep -q "sl3000" "$MK_DIR/$MK_NAME"; then
+            echo "ℹ️ filogic.mk 已包含 sl3000"
+        else
+            echo "⚠️ filogic.mk 未包含 sl3000 → 自动对齐"
+            cp -f target/linux/mediatek/image/filogic.mk "$MK_DIR/"
+        fi
+
+        if grep -q "sl3000" "$MK_DIR/$MK_NAME"; then
+            echo "✅ filogic.mk 对齐成功"
+        else
+            echo "❌ filogic.mk 对齐失败"
+            exit 1
+        fi
+
+        ###############################################
+        # 4. RootFS 自动修复
+        ###############################################
         grep -q "^CONFIG_PACKAGE_luci=y" "$CONFIG" || echo "CONFIG_PACKAGE_luci=y" >> "$CONFIG"
         sed -i "/^CONFIG_PACKAGE_default-settings=y/d" "$CONFIG"
         grep -q "^CONFIG_PACKAGE_luci-app-store=y" "$CONFIG" && \
         ! grep -q "^CONFIG_PACKAGE_luci-base=y" "$CONFIG" && \
         echo "CONFIG_PACKAGE_luci-base=y" >> "$CONFIG"
+
         find "$ROOT/dl" -size 0 -delete || true
 
-        echo "---- DTS 自动注册 ----"
-        MF="$ROOT/target/linux/mediatek/Makefile"
-        grep -q "mt7981b-sl3000-emmc.dtb" "$MF" || echo "dtb-y += mt7981b-sl3000-emmc.dtb" >> "$MF"
-
-        echo "---- 清理无效包 ----"
-        for pkg in pcat-manager policycoreutils audit lldpd; do
-            sed -i "/CONFIG_PACKAGE_${pkg}=y/d" "$CONFIG"
-        done
-
-        echo "---- 清理 patch 冲突 ----"
+        ###############################################
+        # 5. patch 冲突清理
+        ###############################################
         find target -name "*.rej" -delete
         find target -name "*.orig" -delete
 
-        echo "---- 修复 DTS include 路径 ----"
+        ###############################################
+        # 6. overlay / DTS include 修复
+        ###############################################
         sed -i 's#mediatek/mt7981.dtsi#mt7981.dtsi#g' target/linux/mediatek/dts/*.dts || true
-
-        echo "---- 修复 overlay 分区大小 ----"
         sed -i 's/IMAGE_SIZE := .*/IMAGE_SIZE := 268435456/' \
           target/linux/mediatek/image/filogic.mk || true
 
-        echo "---- 清理构建缓存 ----"
+        ###############################################
+        # 7. 构建缓存清理
+        ###############################################
         rm -rf "$ROOT/tmp"/* "$ROOT/build_dir"/* "$ROOT/staging_dir" || true
 
-        echo "---- 工具链自动修复 ----"
+        ###############################################
+        # 8. 工具链自动修复
+        ###############################################
         make tools/compile -j1 V=s || {
             rm -rf "$ROOT/build_dir/host/stamp" "$ROOT/tools/stamp" "$ROOT/staging_dir/host/stamp"
             make tools/compile -j1 V=s
         }
 
-        echo "---- dl 自动修复 ----"
+        ###############################################
+        # 9. dl 自动修复
+        ###############################################
         chmod -R 755 dl
         make download -j8 || {
             rm -rf "$ROOT/dl"/*
             make download -j8
         }
 
-        echo "---- feeds 自动修复 ----"
+        ###############################################
+        # 10. feeds 自动修复
+        ###############################################
         ./scripts/feeds clean
         ./scripts/feeds update -a || true
         ./scripts/feeds install -a || true
 
-        echo "---- kernel_oldconfig 自动修复 ----"
+        ###############################################
+        # 11. kernel_oldconfig 自动修复
+        ###############################################
         yes "" | make kernel_oldconfig
 
-        echo "---- ccache 初始化 ----"
+        ###############################################
+        # 12. ccache 初始化
+        ###############################################
         export CCACHE_DIR=~/.ccache
         ccache -M 2G || true
         ccache -z || true
 
-        echo "===== SL3000 全自动修复准备完成 ====="
+        echo "===== SL3000 全自动修复完成 ====="
 
     - name: Build firmware
       run: |
@@ -136,10 +220,7 @@ jobs:
         export CXX="ccache g++"
 
         make defconfig
-
-        echo "---- 开始构建（自动 fallback） ----"
-        make image PROFILE=sl3000 -j$(nproc) V=s || \
-        make image PROFILE=sl3000 -j1 V=s
+        make image PROFILE=sl3000 -j$(nproc) V=s || make image PROFILE=sl3000 -j1 V=s
 
         df -h
         ccache -s || true
@@ -160,7 +241,8 @@ jobs:
         body: |
           自动构建固件（SL3000 / ImmortalWrt 24.10）
           - 构建编号：${{ github.run_number }}
-          - 自动修复：工具链 / dl / feeds / patch / DTS / mk / overlay / kernel_oldconfig
+          - 三件套自动检测 / 自动注册 / 自动对齐 / 自动修复
+          - 工具链 / dl / feeds / patch / overlay / kernel_oldconfig 全自动修复
           - 构建模式：无人值守全自动修复
         files: /home/runner/immortalwrt/bin/targets/mediatek/filogic/*
       env:
