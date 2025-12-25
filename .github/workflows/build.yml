@@ -23,7 +23,7 @@ jobs:
         sudo apt update
         sudo apt install -y build-essential clang flex bison g++ gawk gcc-multilib \
           gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev \
-          file wget python3 python3-pip ccache perl pkg-config libelf-dev libncursesw5-dev
+          file wget python3 python3-pip ccache perl pkg-config libelf-dev libncursesw5-dev parted e2fsprogs
         pip3 install --upgrade pip setuptools wheel
 
     - name: Clone ImmortalWrt
@@ -58,7 +58,7 @@ jobs:
         restore-keys: |
           ccache-${{ runner.os }}-
 
-    - name: Prepare SL3000 (十三件套全链路修复)
+    - name: Prepare SL3000 (全链路修复)
       run: |
         set -e
         ROOT="/home/runner/immortalwrt"
@@ -71,46 +71,45 @@ jobs:
 
         echo "===== SL3000 自动修复开始 ====="
 
-        # 基础配置
         make defconfig
         yes "" | make kernel_oldconfig
 
-        # DTS/MK/CONFIG 修复
+        # 显式补全缺失的内核选项，避免 syncconfig 交互
+        {
+          echo "CONFIG_KEXEC=y"
+          echo "CONFIG_KEXEC_FILE=n"
+          echo "CONFIG_CRASH_DUMP=y"
+          echo "CONFIG_CRASH_HOTPLUG=y"
+        } >> .config
+
         grep -q "sl3000" .config || echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> .config
         grep -q "mt7981b-sl3000-emmc.dtb" target/linux/mediatek/Makefile || echo "dtb-y += mt7981b-sl3000-emmc.dtb" >> target/linux/mediatek/Makefile
+
         sed -i "/^CONFIG_PACKAGE_default-settings=y/d" .config
         grep -q "^CONFIG_PACKAGE_luci=y" .config || echo "CONFIG_PACKAGE_luci=y" >> .config
 
-        # feeds 修复
         ./scripts/feeds clean
         ./scripts/feeds update -a || true
         ./scripts/feeds install -a || true
 
-        # dl 修复
         find dl -size 0 -delete || true
-        chmod -R 755 dl || true
-
-        # patch/overlay 修复
         find target -name "*.rej" -delete
         find target -name "*.orig" -delete
         rm -rf tmp/* build_dir/* staging_dir/* || true
 
-        # 禁用 autoreconf
         mkdir -p staging_dir/host/bin
         echo -e '#!/bin/sh\nexit 0' > staging_dir/host/bin/autoreconf
         chmod +x staging_dir/host/bin/autoreconf
 
-        # 工具链修复（彻底隔离环境）
         env -i PATH="$PATH" HOME="$HOME" CCACHE_DIR="$HOME/.ccache" \
           MAKEFLAGS= FORCE_UNSAFE_CONFIGURE=1 NOCONFIGURE=1 \
           make tools/compile -j1 V=s || exit 1
 
-        # ccache 配置
         export CCACHE_DIR=~/.ccache
         ccache -M 2G || true
         ccache -z || true
 
-        # 写入 EMMC 自动扩容脚本
+        # 注入 EMMC 自动扩容脚本
         mkdir -p files/etc/init.d
         {
           echo '#!/bin/sh /etc/rc.common'
@@ -170,6 +169,7 @@ jobs:
           自动构建固件（SL3000 / ImmortalWrt 24.10）
           - 构建编号：${{ github.run_number }}
           - 全链路十三件套自动修复（CONFIG/DTS/MK/feeds/dl/tools/patch/overlay/kernel_oldconfig）
+          - 显式补全 KEXEC/CRASH_DUMP 等缺失内核选项
           - 禁用 autoreconf + 禁用 jobserver
           - 首启自动扩容 EMMC 根分区
           - 自动生成 SHA256 校验文件
