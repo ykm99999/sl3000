@@ -6,6 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 180
 
     steps:
     - name: Checkout my repo
@@ -37,8 +38,8 @@ jobs:
         mkdir -p /home/runner/immortalwrt/target/linux/mediatek/dts
         mkdir -p /home/runner/immortalwrt/target/linux/mediatek/image
         cp configs/s13000.config /home/runner/immortalwrt/.config
-        cp dts/mt7981-sl3000-emmc.dts /home/runner/immortalwrt/target/linux/mediatek/dts/
-        cp image/filogic.mk /home/runner/immortalwrt/target/linux/mediatek/image/
+        cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts /home/runner/immortalwrt/target/linux/mediatek/dts/
+        cp target/linux/mediatek/image/filogic.mk /home/runner/immortalwrt/target/linux/mediatek/image/
 
     - name: Cache dl
       uses: actions/cache@v4
@@ -69,9 +70,11 @@ jobs:
 
         echo "===== SL3000 自动修复开始 ====="
 
+        # 内核新选项自动补全
         make defconfig
         yes "" | make kernel_oldconfig
 
+        # 显式补全缺失的内核选项
         {
           echo "CONFIG_KEXEC=y"
           echo "CONFIG_KEXEC_FILE=n"
@@ -79,26 +82,36 @@ jobs:
           echo "CONFIG_CRASH_HOTPLUG=y"
         } >> .config
 
-        grep -q "sl3000" .config || echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> .config
-        grep -q "mt7981-sl3000-emmc.dts" target/linux/mediatek/Makefile || \
-          echo "dts-\$(CONFIG_TARGET_mediatek_filogic) += mt7981-sl3000-emmc.dts" >> target/linux/mediatek/Makefile
+        # 注册 DTS
+        grep -q "mt7981b-sl3000-emmc.dts" target/linux/mediatek/Makefile || \
+          echo "dts-\$(CONFIG_TARGET_mediatek_filogic) += mt7981b-sl3000-emmc.dts" >> target/linux/mediatek/Makefile
 
-        sed -i "/^CONFIG_PACKAGE_default-settings=y/d" .config
-        grep -q "^CONFIG_PACKAGE_luci=y" .config || echo "CONFIG_PACKAGE_luci=y" >> .config
-
+        # feeds 修复
         ./scripts/feeds clean
         ./scripts/feeds update -a || true
         ./scripts/feeds install -a || true
 
+        # feeds 冲突包自动移除
+        sed -i '/CONFIG_PACKAGE_.*=y/d' .config
+        echo "CONFIG_PACKAGE_luci=y" >> .config
+
+        # patch/overlay 全目录清理
+        find package feeds target -name "*.rej" -delete
+        find package feeds target -name "*.orig" -delete
+
+        # dl 校验失败自动重拉
+        make download -j8 || make download -j1 V=s
         find dl -size 0 -delete || true
-        find target -name "*.rej" -delete
-        find target -name "*.orig" -delete
+
+        # tmp/staging_dir 清理
         rm -rf tmp/* build_dir/* staging_dir/* || true
 
+        # 禁用 autoreconf
         mkdir -p staging_dir/host/bin
         echo -e '#!/bin/sh\nexit 0' > staging_dir/host/bin/autoreconf
         chmod +x staging_dir/host/bin/autoreconf
 
+        # 工具链编译
         env -i PATH="$PATH" HOME="$HOME" CCACHE_DIR="$HOME/.ccache" \
           MAKEFLAGS= FORCE_UNSAFE_CONFIGURE=1 NOCONFIGURE=1 \
           make tools/compile -j1 V=s || exit 1
@@ -118,7 +131,12 @@ jobs:
 
         make defconfig
         yes "" | make kernel_oldconfig
-        make -j$(nproc) V=s || make -j1 V=s || exit 1
+
+        # 分段编译 + 并行限制 + fallback
+        make toolchain/install -j1 V=s
+        make target/linux/compile -j1 V=sc || make target/linux/compile -j1 V=sc
+        make target/linux/install -j1 V=s
+        make -j4 V=s || make -j1 V=s || exit 1
 
         df -h
         ccache -s || true
@@ -143,9 +161,14 @@ jobs:
         body: |
           自动构建固件（SL3000 / ImmortalWrt 25.12-SNAPSHOT）
           - 构建编号：${{ github.run_number }}
-          - 全链路十三件套自动修复（CONFIG/DTS/MK/feeds/dl/tools/patch/overlay/kernel_oldconfig）
-          - 显式补全 KEXEC/CRASH_DUMP 等缺失内核选项
-          - 首启自动扩容 EMMC 根分区
+          - 全链路自动修复：CONFIG/DTS/MK/feeds/dl/tools/patch/overlay/kernel_oldconfig
+          - 自动补全内核新选项
+          - feeds 冲突包通用移除
+          - patch/overlay 全目录清理
+          - dl 校验失败自动重拉
+          - tmp/staging_dir 二次清理
+          - jobserver 死锁防护
+          - 工具链缓存
           - 自动生成 SHA256 校验文件
         files: |
           /home/runner/immortalwrt/bin/targets/mediatek/filogic/*
