@@ -74,7 +74,7 @@ jobs:
         make defconfig
         yes "" | make kernel_oldconfig
 
-        # 显式补全缺失的内核选项，避免 syncconfig 交互
+        # 显式补全缺失的内核选项
         {
           echo "CONFIG_KEXEC=y"
           echo "CONFIG_KEXEC_FILE=n"
