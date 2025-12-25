@@ -59,7 +59,7 @@ jobs:
         restore-keys: |
           ccache-${{ runner.os }}-
 
-    - name: Prepare SL3000 (禁用 autoreconf + jobserver)
+    - name: Prepare SL3000 (禁用 autoreconf + jobserver + kernel_oldconfig)
       run: |
         set -e
         ROOT="/home/runner/immortalwrt"
@@ -73,8 +73,8 @@ jobs:
         echo "===== SL3000 自动修复开始 ====="
 
         make defconfig
+        yes "" | make kernel_oldconfig
 
-        # DTS/MK 修复
         grep -q "sl3000" .config || echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> .config
         grep -q "mt7981b-sl3000-emmc.dtb" target/linux/mediatek/Makefile || echo "dtb-y += mt7981b-sl3000-emmc.dtb" >> target/linux/mediatek/Makefile
 
@@ -102,8 +102,6 @@ jobs:
         ./scripts/feeds update -a || true
         ./scripts/feeds install -a || true
 
-        yes "" | make kernel_oldconfig
-
         export CCACHE_DIR=~/.ccache
         ccache -M 2G || true
         ccache -z || true
@@ -118,6 +116,7 @@ jobs:
         export CXX="ccache g++"
 
         make defconfig
+        yes "" | make kernel_oldconfig
         make -j$(nproc) V=s || make -j1 V=s || exit 1
 
         df -h
@@ -145,6 +144,7 @@ jobs:
           - 构建编号：${{ github.run_number }}
           - 全链路自动修复（CONFIG/DTS/MK/feeds/dl/tools/patch/overlay）
           - 禁用 autoreconf + 禁用 jobserver
+          - 自动执行 kernel_oldconfig，避免交互错误
           - 首启自动扩容 EMMC 根分区
           - 自动生成 SHA256 校验文件
         files: |
