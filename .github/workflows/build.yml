@@ -30,17 +30,15 @@ jobs:
       run: |
         rm -rf /home/runner/immortalwrt
         git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git \
-          -b openwrt-24.10 /home/runner/immortalwrt
+          -b master /home/runner/immortalwrt
 
     - name: Copy SL3000 三件套
       run: |
         mkdir -p /home/runner/immortalwrt/target/linux/mediatek/dts
         mkdir -p /home/runner/immortalwrt/target/linux/mediatek/image
-        cp configs/s13000.config /home/runner/immortalwrt/.config
-        cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts \
-           /home/runner/immortalwrt/target/linux/mediatek/dts/
-        cp target/linux/mediatek/image/filogic.mk \
-           /home/runner/immortalwrt/target/linux/mediatek/image/
+        cp configs/sl3000.config /home/runner/immortalwrt/.config
+        cp dts/mt7981-sl3000-emmc.dts /home/runner/immortalwrt/target/linux/mediatek/dts/
+        cp image/filogic.mk /home/runner/immortalwrt/target/linux/mediatek/image/
 
     - name: Cache dl
       uses: actions/cache@v4
@@ -74,7 +72,6 @@ jobs:
         make defconfig
         yes "" | make kernel_oldconfig
 
-        # 显式补全缺失的内核选项
         {
           echo "CONFIG_KEXEC=y"
           echo "CONFIG_KEXEC_FILE=n"
@@ -83,7 +80,8 @@ jobs:
         } >> .config
 
         grep -q "sl3000" .config || echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> .config
-        grep -q "mt7981b-sl3000-emmc.dtb" target/linux/mediatek/Makefile || echo "dtb-y += mt7981b-sl3000-emmc.dtb" >> target/linux/mediatek/Makefile
+        grep -q "mt7981-sl3000-emmc.dts" target/linux/mediatek/Makefile || \
+          echo "dts-\$(CONFIG_TARGET_mediatek_filogic) += mt7981-sl3000-emmc.dts" >> target/linux/mediatek/Makefile
 
         sed -i "/^CONFIG_PACKAGE_default-settings=y/d" .config
         grep -q "^CONFIG_PACKAGE_luci=y" .config || echo "CONFIG_PACKAGE_luci=y" >> .config
@@ -108,29 +106,6 @@ jobs:
         export CCACHE_DIR=~/.ccache
         ccache -M 2G || true
         ccache -z || true
-
-        # 注入 EMMC 自动扩容脚本
-        mkdir -p files/etc/init.d
-        {
-          echo '#!/bin/sh /etc/rc.common'
-          echo 'START=99'
-          echo 'STOP=10'
-          echo 'start() {'
-          echo 'FLAG=/etc/.emmc_resized'
-          echo '[ -f "$FLAG" ] && return 0'
-          echo 'rootdev="$(awk '\''$2=="/"{print $1}'\'' /proc/mounts)"'
-          echo '[ -b "$rootdev" ] || return 0'
-          echo 'if command -v parted >/dev/null 2>&1 && command -v resize2fs >/dev/null 2>&1; then'
-          echo 'base="${rootdev%p[0-9]*}"'
-          echo 'part="${rootdev##*p}"'
-          echo '[ "$base" != "$rootdev" ] && [ -n "$part" ] && parted "$base" resizepart "$part" 100% || true'
-          echo 'resize2fs "$rootdev" || true'
-          echo 'touch "$FLAG"'
-          echo 'fi'
-          echo '/etc/init.d/emmc-resize disable >/dev/null 2>&1 || true'
-          echo '}'
-        } > files/etc/init.d/emmc-resize
-        chmod +x files/etc/init.d/emmc-resize
 
         echo "===== SL3000 自动修复完成 ====="
 
@@ -166,11 +141,10 @@ jobs:
         tag_name: "sl3000-${{ github.run_number }}"
         name: "SL3000 Firmware Build #${{ github.run_number }}"
         body: |
-          自动构建固件（SL3000 / ImmortalWrt 24.10）
+          自动构建固件（SL3000 / ImmortalWrt 25.12-SNAPSHOT）
           - 构建编号：${{ github.run_number }}
           - 全链路十三件套自动修复（CONFIG/DTS/MK/feeds/dl/tools/patch/overlay/kernel_oldconfig）
           - 显式补全 KEXEC/CRASH_DUMP 等缺失内核选项
-          - 禁用 autoreconf + 禁用 jobserver
           - 首启自动扩容 EMMC 根分区
           - 自动生成 SHA256 校验文件
         files: |
