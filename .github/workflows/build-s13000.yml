@@ -36,35 +36,23 @@ jobs:
     - name: Verify & Copy SL3000 三件套
       run: |
         ROOT="/home/runner/immortalwrt"
-
-        # 验证三件套是否存在
         test -f configs/s13000.config || { echo "❌ 缺少 configs/s13000.config"; exit 1; }
         test -f target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts || { echo "❌ 缺少 DTS 文件"; exit 1; }
         test -f target/linux/mediatek/image/filogic.mk || { echo "❌ 缺少 filogic.mk"; exit 1; }
-
-        # 复制三件套
         cp configs/s13000.config $ROOT/.config
         cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts $ROOT/target/linux/mediatek/dts/
         cp target/linux/mediatek/image/filogic.mk $ROOT/target/linux/mediatek/image/
-
         echo "✅ 三件套已验证并复制完成"
 
     - name: Auto-fix SL3000 三件套
       run: |
         cd /home/runner/immortalwrt
-
-        # 自动补全 config
         grep -q "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" .config || \
           echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> .config
-
-        # 自动注册 DTS
         grep -q "mt7981b-sl3000-emmc.dts" target/linux/mediatek/Makefile || \
           echo "dts-\$(CONFIG_TARGET_mediatek_filogic) += mt7981b-sl3000-emmc.dts" >> target/linux/mediatek/Makefile
-
-        # 自动补全 MK 条目
         grep -q "DEVICE_sl3000" target/linux/mediatek/image/filogic.mk || \
           echo -e "\ndefine Device/sl3000\n  DEVICE_TITLE := SL3000 Board\nendef\nTARGET_DEVICES += sl3000" >> target/linux/mediatek/image/filogic.mk
-
         echo "✅ 三件套已自动修复完成"
 
     - name: Cache dl
@@ -87,58 +75,50 @@ jobs:
       run: |
         set -e
         trap 'echo "[ERROR] 构建失败，终止 job"; exit 1' ERR
-        ROOT="/home/runner/immortalwrt"
-        cd "$ROOT"
-
+        cd /home/runner/immortalwrt
         export MAKEFLAGS=
         export PARALLEL_JOBS=1
         export FORCE_UNSAFE_CONFIGURE=1
         export NOCONFIGURE=1
-
         echo "===== SL3000 自动修复开始 ====="
-
         make defconfig
         yes "" | make kernel_oldconfig
-
         {
           echo "CONFIG_KEXEC=y"
           echo "CONFIG_KEXEC_FILE=n"
           echo "CONFIG_CRASH_DUMP=y"
           echo "CONFIG_CRASH_HOTPLUG=y"
         } >> .config
-
         ./scripts/feeds clean
         ./scripts/feeds update -a || true
         ./scripts/feeds install -a || true
-
+        echo "✅ feeds install 完成"
         sed -i '/CONFIG_PACKAGE_.*=y/d' .config
         echo "CONFIG_PACKAGE_luci=y" >> .config
-
         find package feeds target -name "*.rej" -delete
         find package feeds target -name "*.orig" -delete
-
         make download -j8 || make download -j1 V=s
         find dl -size 0 -delete || true
-
         rm -rf tmp/* build_dir/* staging_dir/* || true
-
         mkdir -p staging_dir/host/bin
         echo -e '#!/bin/sh\nexit 0' > staging_dir/host/bin/autoreconf
         chmod +x staging_dir/host/bin/autoreconf
-
         env -i PATH="$PATH" HOME="$HOME" CCACHE_DIR="$HOME/.ccache" \
           MAKEFLAGS= FORCE_UNSAFE_CONFIGURE=1 NOCONFIGURE=1 \
           make tools/compile -j1 V=s || exit 1
-
         export CCACHE_DIR=~/.ccache
         ccache -M 2G || true
         ccache -z || true
-
         echo "===== SL3000 自动修复完成 ====="
 
     - name: Keep alive
       run: |
         while true; do echo "[keep-alive] $(date)"; sleep 300; done &
+
+    - name: Build toolchain separately
+      run: |
+        cd /home/runner/immortalwrt
+        make toolchain/install -j1 V=s || make toolchain/install -j1 V=s
 
     - name: Build firmware
       run: |
@@ -146,15 +126,11 @@ jobs:
         export CCACHE_DIR=~/.ccache
         export CC="ccache gcc"
         export CXX="ccache g++"
-
         make defconfig
         yes "" | make kernel_oldconfig
-
-        make toolchain/install -j1 V=s
         make target/linux/compile -j1 V=sc || make target/linux/compile -j1 V=sc
         make target/linux/install -j1 V=s
         make -j4 V=s || make -j1 V=s || exit 1
-
         df -h
         ccache -s || true
 
@@ -188,6 +164,7 @@ jobs:
           - tmp/staging_dir 二次清理
           - jobserver 死锁防护
           - 输出心跳防止卡死
+          - 工具链单独编译
           - 自动生成 SHA256 校验文件
         files: |
           /home/runner/immortalwrt/bin/targets/mediatek/filogic/*
