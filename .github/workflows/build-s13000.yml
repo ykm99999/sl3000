@@ -33,13 +33,39 @@ jobs:
         git clone --depth=1 https://github.com/immortalwrt/immortalwrt.git \
           -b master /home/runner/immortalwrt
 
-    - name: Copy SL3000 三件套
+    - name: Verify & Copy SL3000 三件套
       run: |
-        mkdir -p /home/runner/immortalwrt/target/linux/mediatek/dts
-        mkdir -p /home/runner/immortalwrt/target/linux/mediatek/image
-        cp configs/s13000.config /home/runner/immortalwrt/.config
-        cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts /home/runner/immortalwrt/target/linux/mediatek/dts/
-        cp target/linux/mediatek/image/filogic.mk /home/runner/immortalwrt/target/linux/mediatek/image/
+        ROOT="/home/runner/immortalwrt"
+
+        # 验证三件套是否存在
+        test -f configs/s13000.config || { echo "❌ 缺少 configs/s13000.config"; exit 1; }
+        test -f target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts || { echo "❌ 缺少 DTS 文件"; exit 1; }
+        test -f target/linux/mediatek/image/filogic.mk || { echo "❌ 缺少 filogic.mk"; exit 1; }
+
+        # 复制三件套
+        cp configs/s13000.config $ROOT/.config
+        cp target/linux/mediatek/dts/mt7981b-sl3000-emmc.dts $ROOT/target/linux/mediatek/dts/
+        cp target/linux/mediatek/image/filogic.mk $ROOT/target/linux/mediatek/image/
+
+        echo "✅ 三件套已验证并复制完成"
+
+    - name: Auto-fix SL3000 三件套
+      run: |
+        cd /home/runner/immortalwrt
+
+        # 自动补全 config
+        grep -q "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" .config || \
+          echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> .config
+
+        # 自动注册 DTS
+        grep -q "mt7981b-sl3000-emmc.dts" target/linux/mediatek/Makefile || \
+          echo "dts-\$(CONFIG_TARGET_mediatek_filogic) += mt7981b-sl3000-emmc.dts" >> target/linux/mediatek/Makefile
+
+        # 自动补全 MK 条目
+        grep -q "DEVICE_sl3000" target/linux/mediatek/image/filogic.mk || \
+          echo -e "\ndefine Device/sl3000\n  DEVICE_TITLE := SL3000 Board\nendef\nTARGET_DEVICES += sl3000" >> target/linux/mediatek/image/filogic.mk
+
+        echo "✅ 三件套已自动修复完成"
 
     - name: Cache dl
       uses: actions/cache@v4
@@ -80,10 +106,6 @@ jobs:
           echo "CONFIG_CRASH_DUMP=y"
           echo "CONFIG_CRASH_HOTPLUG=y"
         } >> .config
-
-        grep -q "sl3000" .config || echo "CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_sl3000=y" >> .config
-        grep -q "mt7981b-sl3000-emmc.dts" target/linux/mediatek/Makefile || \
-          echo "dts-\$(CONFIG_TARGET_mediatek_filogic) += mt7981b-sl3000-emmc.dts" >> target/linux/mediatek/Makefile
 
         ./scripts/feeds clean
         ./scripts/feeds update -a || true
@@ -156,7 +178,9 @@ jobs:
         body: |
           自动构建固件（SL3000 / ImmortalWrt 25.12-SNAPSHOT）
           - 构建编号：${{ github.run_number }}
-          - 全链路自动修复：CONFIG/DTS/MK/feeds/dl/tools/patch/overlay/kernel_oldconfig
+          - 自动验证三件套存在性
+          - 自动修复三件套配置（CONFIG/DTS/MK）
+          - 全链路自动修复：feeds/dl/tools/patch/overlay/kernel_oldconfig
           - 自动补全内核新选项
           - feeds 冲突包通用移除
           - patch/overlay 全目录清理
